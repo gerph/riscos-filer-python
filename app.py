@@ -3,6 +3,7 @@
 import wx
 
 import fs
+import fsnative
 import fsexplorer
 
 
@@ -18,7 +19,7 @@ class DemoFrame(wx.Frame):
         item = FileMenu.Append(wx.ID_EXIT, "&Exit")
         self.Bind(wx.EVT_MENU, self.OnQuit, item)
 
-        item = FileMenu.Append(wx.ID_ANY, "&Open")
+        item = FileMenu.Append(wx.ID_ANY, "&Open root")
         self.Bind(wx.EVT_MENU, self.OnOpen, item)
 
         MenuBar.Append(FileMenu, "&File")
@@ -30,7 +31,7 @@ class DemoFrame(wx.Frame):
         btn.Bind(wx.EVT_BUTTON, self.OnQuit )
         vbox.Add(btn)
 
-        btn = wx.Button(self, label="Open")
+        btn = wx.Button(self, label="Open root")
         btn.Bind(wx.EVT_BUTTON, self.OnOpen )
         vbox.Add(btn)
 
@@ -39,7 +40,7 @@ class DemoFrame(wx.Frame):
         self.Bind(wx.EVT_CLOSE, self.OnQuit)
 
         self.explorers = fsexplorer.FSExplorers()
-        self.fs = fs.FSNative('/Users/charles')
+        self.fs = fsnative.FSNative('/Users/charles')
 
         win = fsexplorer.FSExplorerFrame(self.fs, '/', self, -1, size=(640, 480), explorers=self.explorers)
         win.Show(True)
