@@ -255,6 +255,18 @@ class FSExplorerFrame(wx.Frame):
         self.panel.Bind(wx.EVT_KEY_DOWN, lambda event: self.on_key(event, down=True))
         self.panel.Bind(wx.EVT_KEY_UP, lambda event: self.on_key(event, down=False))
 
+        # Build up the menu we'll use
+        self.menu = wx.Menu()
+        self.add_menu_selection(self.menu)
+
+    def add_menuitem(self, menu, name, func):
+        menuitem = menu.Append(-1, name, kind=wx.ITEM_NORMAL)
+        self.Bind(wx.EVT_MENU, func, menuitem)
+
+    def add_menu_selection(self, menu):
+        self.add_menuitem(menu, 'Select all', lambda event: self.SelectAll())
+        self.add_menuitem(menu, 'Clear selection', lambda event: self.DeselectAll())
+
     def on_key(self, event, down):
         keycode = event.GetKeyCode()
         if keycode == wx.WXK_SHIFT:
@@ -361,6 +373,7 @@ class FSExplorerFrame(wx.Frame):
     def on_file_menu(self, fsfile):
         if self.debug:
             print("Menu: %r" % (fsfile,))
+        self.PopupMenu(self.menu)
 
     def OnFileActivate(self, fsfile, close=False, shift=None):
         if self.debug:
