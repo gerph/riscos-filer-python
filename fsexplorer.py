@@ -410,8 +410,11 @@ class FSExplorerFrame(wx.Frame):
         else:
             pos = self.GetPosition()
             pos = (pos.x + self.open_offset_x, pos.y + self.open_offset_y)
-            win = FSExplorerFrame(self.fs, target, None, -1,
-                                  explorers=self.explorers,
-                                  pos=pos,
-                                  size=(self.default_width, self.default_height))
-            win.Show(True)
+            self.OpenExplorer(target, pos=pos)
+
+    def OpenExplorer(self, target, pos):
+        win = FSExplorerFrame(self.fs, target, None, -1,
+                              explorers=self.explorers,
+                              pos=pos,
+                              size=(self.default_width, self.default_height))
+        win.Show(True)
