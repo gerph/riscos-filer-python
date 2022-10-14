@@ -60,10 +60,6 @@ class FSFileNative(FSFileBase):
             self._isdir = os.path.isdir(self.native_filename)
         return self._isdir
 
-    @property
-    def leafname(self):
-        return self.fs.leafname(self.filename)
-
 
 class FSDirectoryNative(FSDirectoryBase):
     """
@@ -79,9 +75,13 @@ class FSDirectoryNative(FSDirectoryBase):
         """
         return FSFileNative(self.fs, self.fs.join(self.dirname, leafname))
 
-    def get_filenames(self):
+    def get_filelist(self):
         """
-        Overridden: Return a list of the leafnames in this directory.
+        Overridden: Return a list of the files in this directory.
+
+        @return: A list of objects which describe the files in the directory; can be
+                 leafnames as strings or structures. The values will be passed to
+                 get_file() to convert to a FSFile object.
         """
         ndirname = self.fs.native_filename(self.dirname)
         files = os.listdir(ndirname)

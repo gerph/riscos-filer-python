@@ -29,9 +29,10 @@ class SVGForFiletype(object):
                 filename = 'icons/file_lxa.svg'
             else:
                 filename = 'icons/file_{:03x}.svg'.format(filetype)
-            if not os.path.exists(filename):
-                filename = 'icons/file_xxx.svg'
             svg_filename = os.path.join(self.resource_dir, filename)
+            if not os.path.exists(svg_filename):
+                filename = 'icons/file_xxx.svg'
+                svg_filename = os.path.join(self.resource_dir, filename)
             svg = SVGimage.CreateFromFile(svg_filename)
 
             self.filetype_svg[filetype] = svg
@@ -248,7 +249,8 @@ class FSExplorerFrame(wx.Frame):
         # FIXME: Update the icon width?
 
         filer_sizer = wx.WrapSizer(orient=wx.HORIZONTAL)
-        for fsfile in self.fsdir.files:
+        files = sorted(self.fsdir.files, key=lambda f: f.leafname.lower())
+        for fsfile in files:
             btn = FSFileIcon(self, self.panel, self.icon_width, self.icon_height, fsfile)
             filer_sizer.Add(btn, 0, wx.ALL, self.icon_spacing)
             self.icons[fsfile.leafname] = btn

@@ -53,7 +53,11 @@ class FSBase(object):
             else:
                 new_args.append(arg)
 
-        return self.rootname() + self.dirsep.join(new_args)
+        root = self.rootname()
+        name = self.dirsep.join(new_args)
+        if not name.startswith(root):
+            return root + name
+        return name
 
     def split(self, filename):
         return [part for part in filename.split(self.dirsep) if part]
@@ -79,6 +83,7 @@ class FSFileBase(object):
     def __init__(self, fs, filename, parent=None):
         self.fs = fs
         self.filename = filename
+        self.leafname = self.fs.leafname(self.filename)
         self._parent = parent
 
     def __repr__(self):
@@ -101,10 +106,6 @@ class FSFileBase(object):
         # Unknown type always goes to data.
         return self.TYPE_DATA
 
-    @property
-    def leafname(self):
-        return self.fs.leafname(self.filename)
-
 
 class FSDirectoryBase(object):
     """
@@ -120,15 +121,19 @@ class FSDirectoryBase(object):
     def __repr__(self):
         return "<{}(fs={}, dirname={!r})>".format(self.__class__.__name__, self.fs, self.dirname)
 
-    def get_file(self, leafname):
+    def get_file(self, fileref):
         """
         Overridden: Return a FSFile object for this file.
         """
-        return FSFileBase(self.fs, self.fs.join(self.dirname, leafname))
+        return FSFileBase(self.fs, self.fs.join(self.dirname, fileref))
 
-    def get_filenames(self):
+    def get_filelist(self):
         """
-        Overridden: Return a list of the leafnames in this directory.
+        Overridden: Return a list of the files in this directory.
+
+        @return: A list of objects which describe the files in the directory; can be
+                 leafnames as strings or structures. The values will be passed to
+                 get_file() to convert to a FSFile object.
         """
         return []
 
@@ -164,10 +169,11 @@ class FSDirectoryBase(object):
         Return a list of objects for files within this directory
         """
         if self._files is None:
-            leafnames = self.get_filenames()
+            filelist = self.get_filelist()
 
             self._files = {}
-            for leafname in sorted(leafnames):
-                self._files[self.fs.normalise_name(leafname)] = self.get_file(leafname)
+            for f in filelist:
+                fsfile = self.get_file(f)
+                self._files[fsfile.leafname] = fsfile
 
         return sorted(self._files.values())
