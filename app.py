@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+import os.path
+
 import wx
 
 import fs
@@ -9,8 +11,8 @@ import fsexplorer
 
 class DemoFrame(wx.Frame):
     """ This window displays a button """
-    def __init__(self, title = "Micro App"):
-        wx.Frame.__init__(self, None , -1, title)
+    def __init__(self, title="Example of RISC OS Filer"):
+        super(DemoFrame, self).__init__(None , -1, title)
 
         MenuBar = wx.MenuBar()
 
@@ -40,11 +42,10 @@ class DemoFrame(wx.Frame):
         self.Bind(wx.EVT_CLOSE, self.OnQuit)
 
         self.explorers = fsexplorer.FSExplorers()
-        self.fs = fsnative.FSNative('/Users/charles')
+        self.fs = fsnative.FSNative(os.path.expanduser('~'))
 
         win = fsexplorer.FSExplorerFrame(self.fs, '/', self, -1, size=(640, 480), explorers=self.explorers)
         win.Show(True)
-
 
     def OnQuit(self,Event):
         self.Destroy()

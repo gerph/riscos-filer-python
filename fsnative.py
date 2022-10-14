@@ -86,6 +86,3 @@ class FSDirectoryNative(FSDirectoryBase):
         ndirname = self.fs.native_filename(self.dirname)
         files = os.listdir(ndirname)
         return files
-
-
-fs = FSNative('/Users/charles')

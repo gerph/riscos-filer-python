@@ -2,7 +2,7 @@
 FSExplorer views, using the fs interfaces.
 """
 
-import os
+import os.path
 
 import wx
 from wx.svg import SVGimage
@@ -149,14 +149,14 @@ class FSFileIcon(wx.Panel):
                 # Run object
                 # (deselect item first)
                 self.select(False)
-                self.frame.on_file_run(self.fsfile, close=False)
+                self.frame.OnFileActivate(self.fsfile, close=False)
 
             elif button == 1:
                 # Run object and close window
-                self.frame.on_file_run(self.fsfile, close=True)
+                self.frame.OnFileActivate(self.fsfile, close=True)
         else:
             if button == 0:
-                self.frame.select_all(False)
+                self.frame.DeselectAll()
                 self.select()
             elif button == 1:
                 self.select()
@@ -219,22 +219,52 @@ class FSExplorerFrame(wx.Frame):
         self.explorers = kwargs.pop('explorers', None)
         self.icons = {}
         self.panel = None
+        self._title_text = None
+        self._title_widget = None
+        self._frametitle_text = None
 
-        kwargs['title'] = self.dirname
+        kwargs['title'] = self.GetFrameTitleText()
+        if 'size' not in kwargs:
+            kwargs['size'] = (self.default_width, self.default_height)
 
         super(FSExplorerFrame, self).__init__(*args, **kwargs)
 
         self.create_panel()
 
+    def GetTitleText(self):
+        if self._title_text:
+            return self._title_text
+        return "Directory: {}".format(self.dirname)
+
+    def SetTitleText(self):
+        if self._title_widget:
+            self._title_text = title
+            self._title_widget.SetLabel(title)
+
+    def GetFrameTitleText(self):
+        if self._frametitle_text:
+            return self._frametitle_text
+        return self.GetTitleText()
+
+    def SetFrameTitleText(self, text):
+        self._frametitle_text = text
+        self.UpdateFrameTitleText()
+
+    def UpdateFrameTitleText(self):
+        text = self.GetFrameTitleText()
+        self.SetTitle(text)
+
     def create_title_region(self):
         region = None
         if self.has_title_area:
-            stx = wx.StaticText(self.panel, -1, "Directory: {}".format(self.dirname))
-            stx.SetFont(wx.Font(28, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
-            sln = wx.StaticLine(self.panel)
-            region = wx.BoxSizer(wx.VERTICAL)
-            region.Add(stx, 0, wx.ALIGN_CENTER_HORIZONTAL|wx.TOP, 8)
-            region.Add(sln, 0, wx.EXPAND|wx.ALL, 8)
+            title = self.GetTitleText()
+            if title:
+                self._title_widget = wx.StaticText(self.panel, -1, title)
+                self._title_widget.SetFont(wx.Font(28, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
+                sln = wx.StaticLine(self.panel)
+                region = wx.BoxSizer(wx.VERTICAL)
+                region.Add(self._title_widget, 0, wx.ALIGN_CENTER_HORIZONTAL|wx.TOP, 8)
+                region.Add(sln, 0, wx.EXPAND|wx.ALL, 8)
         return region
 
     def create_panel(self):
@@ -270,7 +300,7 @@ class FSExplorerFrame(wx.Frame):
         if self.explorers:
             self.explorers.update_closed(self.dirname)
 
-    def change_directory(self, dirname):
+    def ChangeDirectory(self, dirname):
         if self.panel:
             if self.explorers:
                 self.explorers.update_closed(self.dirname)
@@ -279,38 +309,52 @@ class FSExplorerFrame(wx.Frame):
         self.fsdir = self.fs.dir(dirname)
         self.icons = {}
         self.create_panel()
+        self.UpdateFrameTitleText()
 
-    def select_file(self, leafname, state):
+    def SelectFile(self, leafname, state=True):
         fsicon = self.icons.get(leafname, None)
         if fsicon:
             fsicon.select(state)
 
-    def select_all(self, state=True):
+    def SelectAll(self, state=True):
         for fsicon in self.icons.values():
             fsicon.select(state)
+
+    def DeselectAll(self):
+        self.SelectAll(state=False)
 
     def on_file_menu(self, fsfile):
         print("Menu: %r" % (fsfile,))
 
-    def on_file_run(self, fsfile, close=False):
-        print("Run: %r" % (fsfile,))
+    def OnFileActivate(self, fsfile, close=False):
+        print("Activate: %r" % (fsfile,))
         if fsfile.isdir():
             target = fsfile.filename
-            if self.explorers:
-                openwindow = self.explorers.find_window(target)
-                if openwindow:
-                    openwindow.Raise()
-                    if close:
-                        self.Close()
-                    return
+            self.OnFileOpenDir(fsfile, close=close)
+        else:
+            self.OnFileRun(fsfile)
 
-            if close:
-                self.change_directory(target)
-            else:
-                pos = self.GetPosition()
-                pos = (pos.x + self.open_offset_x, pos.y + self.open_offset_y)
-                win = FSExplorerFrame(self.fs, fsfile.filename, None, -1,
-                                      explorers=self.explorers,
-                                      pos=pos,
-                                      size=(self.default_width, self.default_height))
-                win.Show(True)
+    def OnFileRun(self, fsfile):
+        print("Run: %r" % (fsfile,))
+
+    def OnFileOpenDir(self, fsfile, close=False):
+        print("OpenDir: %r" % (fsfile,))
+        target = fsfile.filename
+        if self.explorers:
+            openwindow = self.explorers.find_window(target)
+            if openwindow:
+                openwindow.Raise()
+                if close:
+                    self.Close()
+                return
+
+        if close:
+            self.ChangeDirectory(target)
+        else:
+            pos = self.GetPosition()
+            pos = (pos.x + self.open_offset_x, pos.y + self.open_offset_y)
+            win = FSExplorerFrame(self.fs, target, None, -1,
+                                  explorers=self.explorers,
+                                  pos=pos,
+                                  size=(self.default_width, self.default_height))
+            win.Show(True)
