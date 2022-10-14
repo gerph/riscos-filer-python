@@ -125,6 +125,9 @@ class FSFileIcon(wx.Panel):
         if self.frame.debug:
             print("Click: %r, Double: %r" % (self.fsfile, double))
 
+        # Ensure that we get focus when we do this.
+        self.frame.SetFocus()
+
         button = 'NONE'
         if double:
             if event.LeftDClick():
@@ -175,7 +178,8 @@ class FSFileIcon(wx.Panel):
                 self.select()
 
             elif button == 'MENU':
-                # FIXME: Menu over an icon window
+                if not self.selected:
+                    self.select()
                 self.frame.on_file_menu(self.fsfile)
 
 
