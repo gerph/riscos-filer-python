@@ -121,46 +121,60 @@ class FSFileIcon(wx.Panel):
             self.Refresh()
 
     def on_click(self, event):
-        print("Click %r" % (self.fsfile,))
-        #for name in dir(event):
-        #    if not name.startswith('_'):
-        #        print("  %s: %r" % (name, getattr(event, name)))
         double = event.LeftDClick() or event.RightDClick()
-        print("Double: %r" % (double,))
+        if self.frame.debug:
+            print("Click: %r, Double: %r" % (self.fsfile, double))
 
-        button = -1
-        # Buttons: 0 => left, 1 => right, 2 => middle, -1 => other
+        button = 'NONE'
         if double:
             if event.LeftDClick():
-                button = 0
+                button = 'SELECT'
             elif event.RightDClick():
-                button = 1
+                button = 'ADJUST'
         else:
             if event.LeftDown():
-                button = 0
+                button = 'SELECT'
             elif event.RightDown():
-                button = 1
+                button = 'ADJUST'
             elif event.MiddleDown():
-                button = 2
+                button = 'MENU'
+
+        # Now let's transform these if we're use the non-RISC OS mouse model
+        if not self.frame.mouse_model_riscos:
+            # The non-RISC OS mouse model is:
+            #   ctrl+left toggles items
+            #   right opens menu
+            if button == 'ADJUST':
+                # Right button means Menu
+                button = 'MENU'
+
+            elif button == 'SELECT' and self.frame.control_down:
+                # If they had control down, we change this to the Adjust button (1)
+                button = 'ADJUST'
+
+        if self.frame.debug:
+            print("Mouse: double=%r button=%r" % (double, button))
 
         if double:
             # Double click
-            if button == 0:
+            if button == 'SELECT':
                 # Run object
                 # (deselect item first)
                 self.select(False)
                 self.frame.OnFileActivate(self.fsfile, close=False)
 
-            elif button == 1:
+            elif button == 'ADJUST':
                 # Run object and close window
                 self.frame.OnFileActivate(self.fsfile, close=True)
         else:
-            if button == 0:
+            if button == 'SELECT':
                 self.frame.DeselectAll()
                 self.select()
-            elif button == 1:
+
+            elif button == 'ADJUST':
                 self.select()
-            elif button == 2:
+
+            elif button == 'MENU':
                 # FIXME: Menu over an icon window
                 self.frame.on_file_menu(self.fsfile)
 
@@ -211,6 +225,7 @@ class FSExplorerFrame(wx.Frame):
     open_offset_y = 32
     default_width = 640
     default_height = 480
+    mouse_model_riscos = False
 
     def __init__(self, fs, dirname, *args, **kwargs):
         self.fs = fs
@@ -222,6 +237,10 @@ class FSExplorerFrame(wx.Frame):
         self._title_text = None
         self._title_widget = None
         self._frametitle_text = None
+        self.debug = False
+
+        self.shift_down = False
+        self.control_down = False
 
         kwargs['title'] = self.GetFrameTitleText()
         if 'size' not in kwargs:
@@ -231,12 +250,28 @@ class FSExplorerFrame(wx.Frame):
 
         self.create_panel()
 
+        # We track keys so that the right events can be delivered for running
+        # or opening files.
+        self.panel.Bind(wx.EVT_KEY_DOWN, lambda event: self.on_key(event, down=True))
+        self.panel.Bind(wx.EVT_KEY_UP, lambda event: self.on_key(event, down=False))
+
+    def on_key(self, event, down):
+        keycode = event.GetKeyCode()
+        if keycode == wx.WXK_SHIFT:
+            if self.debug:
+                print("Key: Shift: %r" % (down,))
+            self.shift_down = down
+        elif keycode == wx.WXK_CONTROL:
+            if self.debug:
+                print("Key: Control: %r" % (down,))
+            self.control_down = down
+
     def GetTitleText(self):
         if self._title_text:
             return self._title_text
         return "Directory: {}".format(self.dirname)
 
-    def SetTitleText(self):
+    def SetTitleText(self, title):
         if self._title_widget:
             self._title_text = title
             self._title_widget.SetLabel(title)
@@ -324,21 +359,26 @@ class FSExplorerFrame(wx.Frame):
         self.SelectAll(state=False)
 
     def on_file_menu(self, fsfile):
-        print("Menu: %r" % (fsfile,))
+        if self.debug:
+            print("Menu: %r" % (fsfile,))
 
-    def OnFileActivate(self, fsfile, close=False):
-        print("Activate: %r" % (fsfile,))
+    def OnFileActivate(self, fsfile, close=False, shift=None):
+        if self.debug:
+            print("Activate: %r" % (fsfile,))
+        if shift is None:
+            shift = self.shift_down
         if fsfile.isdir():
-            target = fsfile.filename
             self.OnFileOpenDir(fsfile, close=close)
         else:
-            self.OnFileRun(fsfile)
+            self.OnFileRun(fsfile, shift)
 
-    def OnFileRun(self, fsfile):
-        print("Run: %r" % (fsfile,))
+    def OnFileRun(self, fsfile, shift):
+        if self.debug:
+            print("Run: %r" % (fsfile,))
 
     def OnFileOpenDir(self, fsfile, close=False):
-        print("OpenDir: %r" % (fsfile,))
+        if self.debug:
+            print("OpenDir: %r" % (fsfile,))
         target = fsfile.filename
         if self.explorers:
             openwindow = self.explorers.find_window(target)
