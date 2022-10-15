@@ -185,9 +185,10 @@ class FSFileIcon(wx.Panel):
 
 class FSExplorerPanel(scrolled.ScrolledPanel):
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, parent, *args, **kwargs):
+        self.parent = parent
         kwargs['style'] = wx.VSCROLL
-        super(FSExplorerPanel, self).__init__(*args, **kwargs)
+        super(FSExplorerPanel, self).__init__(parent, *args, **kwargs)
         self.SetupScrolling(scroll_x=False)
         self.Bind(wx.EVT_SIZE, self.on_size)
 
@@ -222,6 +223,8 @@ class FSExplorers(object):
 class FSExplorerFrame(wx.Frame):
 
     icon_spacing = 8
+    icon_padding = 4
+    min_icon_width = 96
     icon_width = 96
     icon_height = 56
     has_title_area = True
@@ -242,6 +245,7 @@ class FSExplorerFrame(wx.Frame):
         self._title_widget = None
         self._frametitle_text = None
         self.debug = False
+        self.files = []
 
         self.shift_down = False
         self.control_down = False
@@ -255,9 +259,12 @@ class FSExplorerFrame(wx.Frame):
         self.create_panel()
 
         # We track keys so that the right events can be delivered for running
-        # or opening files.
+        # or opening files with control keys pressed.
         self.panel.Bind(wx.EVT_KEY_DOWN, lambda event: self.on_key(event, down=True))
         self.panel.Bind(wx.EVT_KEY_UP, lambda event: self.on_key(event, down=False))
+        # We want regular characters for the cases where we're controlling by
+        # the keyboard.
+        self.panel.Bind(wx.EVT_CHAR, self.on_key_char)
 
         # Build up the menu we'll use
         self.menu = wx.Menu()
@@ -281,6 +288,14 @@ class FSExplorerFrame(wx.Frame):
             if self.debug:
                 print("Key: Control: %r" % (down,))
             self.control_down = down
+        event.Skip()
+
+    def on_key_char(self, event):
+        """
+        Handle any extra key codes - don't have any yet.
+        """
+        keycode = event.GetKeyCode()
+        event.Skip()
 
     def GetTitleText(self):
         if self._title_text:
@@ -330,9 +345,18 @@ class FSExplorerFrame(wx.Frame):
         # FIXME: Update the icon width?
 
         filer_sizer = wx.WrapSizer(orient=wx.HORIZONTAL)
-        files = sorted(self.fsdir.files, key=lambda f: f.leafname.lower())
-        for fsfile in files:
-            btn = FSFileIcon(self, self.panel, self.icon_width, self.icon_height, fsfile)
+        self.files = sorted(self.fsdir.files, key=lambda f: f.leafname.lower())
+
+        # Get the size of the icons
+        dc = wx.ScreenDC()
+        icon_width = self.min_icon_width
+        for fsfile in self.files:
+            # FIXME: Should we have ensured that these names were presentation encoding?
+            size = dc.GetTextExtent(fsfile.leafname)
+            icon_width = max(icon_width, size[0] + self.icon_padding)
+
+        for fsfile in self.files:
+            btn = FSFileIcon(self, self.panel, icon_width, self.icon_height, fsfile)
             filer_sizer.Add(btn, 0, wx.ALL, self.icon_spacing)
             self.icons[fsfile.leafname] = btn
 
