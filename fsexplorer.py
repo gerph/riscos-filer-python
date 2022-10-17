@@ -185,8 +185,14 @@ class FSFileIcon(wx.Panel):
 
 class FSExplorerPanel(scrolled.ScrolledPanel):
 
+    min_icon_width = 96
+    icon_padding = 4
+    icon_spacing = 8
+    icon_height = 56
+
     def __init__(self, parent, *args, **kwargs):
         self.parent = parent
+
         kwargs['style'] = wx.VSCROLL
         super(FSExplorerPanel, self).__init__(parent, *args, **kwargs)
         self.SetupScrolling(scroll_x=False)
@@ -194,12 +200,54 @@ class FSExplorerPanel(scrolled.ScrolledPanel):
 
         self.selection_colour = wx.Colour(192, 192, 192)
 
+        self.icons = {}
+
+        upper = self.create_title_region()
+
+        filer_sizer = wx.WrapSizer(orient=wx.HORIZONTAL)
+        self.text_width = {}
+
+        # Get the size of the icons
+        dc = wx.ScreenDC()
+        for fsfile in self.parent.files:
+            # FIXME: Should we have ensured that these names were presentation encoding?
+            size = dc.GetTextExtent(fsfile.leafname)
+            self.text_width[fsfile.leafname] = size[0] + self.icon_padding
+
+        icon_width = self.min_icon_width
+        icon_width = max(icon_width, *self.text_width.values())
+
+        for fsfile in self.parent.files:
+            btn = FSFileIcon(self.parent, self, icon_width, self.icon_height, fsfile)
+            filer_sizer.Add(btn, 0, wx.ALL, self.icon_spacing)
+            self.icons[fsfile.leafname] = btn
+
+        self.Sizer = wx.BoxSizer(wx.VERTICAL)
+        if upper:
+            self.Sizer.Add(upper, 0, wx.EXPAND)
+        self.Sizer.Add(filer_sizer, 0, wx.EXPAND|wx.LEFT|wx.RIGHT, 8)
+
+        self.Layout()
+
     def on_size(self, evt):
         size = self.GetSize()
         vsize = self.GetVirtualSize()
         self.SetVirtualSize((size[0], vsize[1]))
 
         evt.Skip()
+
+    def create_title_region(self):
+        region = None
+        if self.parent.has_title_area:
+            title = self.parent.GetTitleText()
+            if title:
+                self._title_widget = wx.StaticText(self, -1, title)
+                self._title_widget.SetFont(wx.Font(28, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
+                sln = wx.StaticLine(self)
+                region = wx.BoxSizer(wx.VERTICAL)
+                region.Add(self._title_widget, 0, wx.ALIGN_CENTER_HORIZONTAL|wx.TOP, 8)
+                region.Add(sln, 0, wx.EXPAND|wx.ALL, 8)
+        return region
 
 
 class FSExplorers(object):
@@ -222,11 +270,6 @@ class FSExplorers(object):
 
 class FSExplorerFrame(wx.Frame):
 
-    icon_spacing = 8
-    icon_padding = 4
-    min_icon_width = 96
-    icon_width = 96
-    icon_height = 56
     has_title_area = True
     open_offset_x = 16
     open_offset_y = 32
@@ -239,7 +282,6 @@ class FSExplorerFrame(wx.Frame):
         self.dirname = dirname
         self.fsdir = self.fs.dir(dirname)
         self.explorers = kwargs.pop('explorers', None)
-        self.icons = {}
         self.panel = None
         self._title_text = None
         self._title_widget = None
@@ -320,52 +362,15 @@ class FSExplorerFrame(wx.Frame):
         text = self.GetFrameTitleText()
         self.SetTitle(text)
 
-    def create_title_region(self):
-        region = None
-        if self.has_title_area:
-            title = self.GetTitleText()
-            if title:
-                self._title_widget = wx.StaticText(self.panel, -1, title)
-                self._title_widget.SetFont(wx.Font(28, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
-                sln = wx.StaticLine(self.panel)
-                region = wx.BoxSizer(wx.VERTICAL)
-                region.Add(self._title_widget, 0, wx.ALIGN_CENTER_HORIZONTAL|wx.TOP, 8)
-                region.Add(sln, 0, wx.EXPAND|wx.ALL, 8)
-        return region
-
     def create_panel(self):
         if self.panel:
             self.panel.Destroy()
             self.panel = None
 
-        # Make a title area and sizer for the upper part of the panel
-        self.panel = FSExplorerPanel(self)
-        upper = self.create_title_region()
-
-        # FIXME: Update the icon width?
-
-        filer_sizer = wx.WrapSizer(orient=wx.HORIZONTAL)
         self.files = sorted(self.fsdir.files, key=lambda f: f.leafname.lower())
 
-        # Get the size of the icons
-        dc = wx.ScreenDC()
-        icon_width = self.min_icon_width
-        for fsfile in self.files:
-            # FIXME: Should we have ensured that these names were presentation encoding?
-            size = dc.GetTextExtent(fsfile.leafname)
-            icon_width = max(icon_width, size[0] + self.icon_padding)
-
-        for fsfile in self.files:
-            btn = FSFileIcon(self, self.panel, icon_width, self.icon_height, fsfile)
-            filer_sizer.Add(btn, 0, wx.ALL, self.icon_spacing)
-            self.icons[fsfile.leafname] = btn
-
-        self.panel.Sizer = wx.BoxSizer(wx.VERTICAL)
-        if upper:
-            self.panel.Sizer.Add(upper, 0, wx.EXPAND)
-        self.panel.Sizer.Add(filer_sizer, 0, wx.EXPAND|wx.LEFT|wx.RIGHT, 8)
-
-        self.Layout()
+        # Make a title area and sizer for the upper part of the panel
+        self.panel = FSExplorerPanel(self)
 
         if self.explorers:
             self.explorers.update_opened(self.dirname, self)
@@ -382,17 +387,16 @@ class FSExplorerFrame(wx.Frame):
 
         self.dirname = dirname
         self.fsdir = self.fs.dir(dirname)
-        self.icons = {}
         self.create_panel()
         self.UpdateFrameTitleText()
 
     def SelectFile(self, leafname, state=True):
-        fsicon = self.icons.get(leafname, None)
+        fsicon = self.panel.icons.get(leafname, None)
         if fsicon:
             fsicon.select(state)
 
     def SelectAll(self, state=True):
-        for fsicon in self.icons.values():
+        for fsicon in self.panel.icons.values():
             fsicon.select(state)
 
     def DeselectAll(self):
