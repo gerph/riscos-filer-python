@@ -44,63 +44,96 @@ svg_for_filetype = SVGForFiletype()
 
 class FSFileIcon(wx.Panel):
 
+    min_icon_width = 64
+    icon_padding = 4
+    default_icon_height = 56
     inner_spacing = 4
 
-    def __init__(self, frame, parent, icon_width, icon_height, fsfile, *args, **kwargs):
+    def __init__(self, frame, parent, text_width, text_height, fsfile, *args, **kwargs):
         kwargs['style'] = wx.DEFAULT_FRAME_STYLE ^ wx.RESIZE_BORDER
-        super(FSFileIcon, self).__init__(parent, *args, **kwargs)
-
-        text_height = 16
 
         self.frame = frame
         self.parent = parent
-        self.icon_width = icon_width
-        self.icon_height = icon_height
-        self.bitmap_width = icon_width
-        self.bitmap_height = icon_height - self.inner_spacing - text_height
+        self.max_text_width = text_width
+        self.max_text_height = text_height
+        self.requested_icon_height = kwargs.pop('icon_height', self.default_icon_height)
+        self.requested_text_width = max(self.min_icon_width, text_width)
         self.fsfile = fsfile
 
+        super(FSFileIcon, self).__init__(parent, *args, **kwargs)
+
         self.selected = False
+        self.sprite_icon = None
 
-        self.icon_size = wx.Size(self.icon_width, self.icon_height)
-        bitmap_size = wx.Size(self.bitmap_width, self.bitmap_height)
-        self.statbmp = wx.BitmapButton(self, -1, style=wx.BORDER_NONE | wx.BU_EXACTFIT | wx.BU_NOTEXT)
+        self.text_size = self.GetTextSize()
+        self.bitmap_size = self.GetSpriteSize()
+        self.icon_size = self.GetIconSize()
 
-        filetype = fsfile.filetype()
-        if fsfile.isdir():
-            filetype = svg_for_filetype.FILETYPE_DIRECTORY
-        svg = svg_for_filetype.get_svg(filetype)
-        aspect = float(svg.width) / svg.height
-        bitmap_size = wx.Size(self.bitmap_height * aspect, self.bitmap_height)
-        bmp = svg.ConvertToScaledBitmap(bitmap_size)
+        self.sprite_icon = self.GetSpriteIcon()
+        self.text_icon = self.GetTextIcon()
 
-        self.statbmp.SetBitmap(bmp)
-        self.statbmp.SetMinSize(bitmap_size)
-        self.statbmp.SetMaxSize(bitmap_size)
-
-        self.stattxt = wx.Button(self, -1, label=self.fsfile.leafname,
-                                 style=wx.ALIGN_CENTRE_HORIZONTAL | wx.BORDER_NONE | wx.BU_EXACTFIT)
-        self.stattxt.SetMaxSize(wx.Size(self.icon_width, text_height))
-        self.stattxt.SetMinSize(wx.Size(self.icon_width, text_height))
-
-        vsizer = wx.BoxSizer(wx.VERTICAL)
-
-        vsizer.Add(self.statbmp, 0, wx.ALIGN_CENTER_HORIZONTAL, 0)
-        vsizer.AddSpacer(self.inner_spacing)
-        vsizer.Add(self.stattxt, 0, wx.EXPAND | wx.ALL, 0)
+        self.icons = (self.sprite_icon, self.text_icon)
 
         self.SetMaxSize(self.icon_size)
         self.SetMinSize(self.icon_size)
-        self.SetSizerAndFit(vsizer)
-        if not self.IsDoubleBuffered():
-            self.SetDoubleBuffered(True)  # Reduce flicker on size event.
 
-        for obj in (self.statbmp, self.stattxt):
+        self.sizer = self.SetupSizer()
+
+        for obj in self.icons:
             obj.Bind(wx.EVT_LEFT_DOWN, self.on_click)
             obj.Bind(wx.EVT_LEFT_DCLICK, self.on_click)
             obj.Bind(wx.EVT_RIGHT_DOWN, self.on_click)
             obj.Bind(wx.EVT_RIGHT_DCLICK, self.on_click)
             obj.Bind(wx.EVT_MIDDLE_DOWN, self.on_click)
+
+    def SetupSizer(self):
+        vsizer = wx.BoxSizer(wx.VERTICAL)
+
+        vsizer.Add(self.sprite_icon, 0, wx.ALIGN_CENTER_HORIZONTAL, 0)
+        vsizer.AddSpacer(self.inner_spacing)
+        vsizer.Add(self.text_icon, 0, wx.EXPAND | wx.ALL, 0)
+
+        self.SetSizerAndFit(vsizer)
+        if not self.IsDoubleBuffered():
+            self.SetDoubleBuffered(True)  # Reduce flicker on size event.
+
+        return vsizer
+
+    def GetIconSize(self):
+        width = max(self.text_size[0], self.bitmap_size[0])
+        height = self.text_size[1] + self.inner_spacing + self.bitmap_size[1]
+        return wx.Size(width, height)
+
+    def GetTextSize(self):
+        return wx.Size(self.requested_text_width, self.max_text_height)
+
+    def GetSpriteSize(self):
+        bitmap_width = self.requested_text_width
+        bitmap_height = self.requested_icon_height - self.inner_spacing - self.text_size[1]
+        return wx.Size(bitmap_width, bitmap_height)
+
+    def GetSpriteIcon(self):
+        sprite_icon = wx.BitmapButton(self, -1, style=wx.BORDER_NONE | wx.BU_EXACTFIT | wx.BU_NOTEXT)
+
+        filetype = self.fsfile.filetype()
+        if self.fsfile.isdir():
+            filetype = svg_for_filetype.FILETYPE_DIRECTORY
+        svg = svg_for_filetype.get_svg(filetype)
+        aspect = float(svg.width) / svg.height
+        actual_size = wx.Size(self.bitmap_size[1] * aspect, self.bitmap_size[1])
+        bmp = svg.ConvertToScaledBitmap(actual_size)
+
+        sprite_icon.SetBitmap(bmp)
+        sprite_icon.SetMinSize(actual_size)
+        sprite_icon.SetMaxSize(actual_size)
+        return sprite_icon
+
+    def GetTextIcon(self):
+        text_icon = wx.Button(self, -1, label=self.fsfile.leafname,
+                              style=wx.ALIGN_CENTRE_HORIZONTAL | wx.BORDER_NONE | wx.BU_EXACTFIT)
+        text_icon.SetMaxSize(self.text_size)
+        text_icon.SetMinSize(self.text_size)
+        return text_icon
 
     def select(self, state=None):
         if state is None:
@@ -116,8 +149,8 @@ class FSFileIcon(wx.Panel):
                 self.SetBackgroundColour(None)
 
             # Ensure that the buttons aren't highlighted too.
-            self.statbmp.SetBackgroundColour(None)
-            self.stattxt.SetBackgroundColour(None)
+            self.sprite_icon.SetBackgroundColour(None)
+            self.text_icon.SetBackgroundColour(None)
             self.Refresh()
 
     def on_click(self, event):
@@ -183,15 +216,71 @@ class FSFileIcon(wx.Panel):
                 self.frame.on_file_menu(self.fsfile)
 
 
+class FSFileLargeIcon(FSFileIcon):
+    pass
+
+
+class FSFileSmallIcon(FSFileIcon):
+    icon_height = 20
+
+    def __init__(self, frame, parent, text_width, text_height, fsfile, *args, **kwargs):
+        kwargs['icon_height'] = self.icon_height
+        super(FSFileSmallIcon, self).__init__(frame, parent, text_width, text_height, fsfile, *args, **kwargs)
+
+    def SetupSizer(self):
+        hsizer = wx.BoxSizer(wx.HORIZONTAL)
+
+        hsizer.Add(self.sprite_icon, 0, wx.ALIGN_CENTER_VERTICAL, 0)
+        hsizer.AddSpacer(self.inner_spacing)
+        hsizer.Add(self.text_icon, 0, 0, 0)
+
+        padding_width = self.icon_size[0] - self.bitmap_size[0] - self.inner_spacing - self.text_size[0]
+        if padding_width > 0:
+            padding = wx.Button(self, -1, label='',
+                                size=wx.Size(padding_width, self.text_size[1]),
+                                style=wx.BU_LEFT | wx.ALIGN_LEFT | wx.BORDER_NONE | wx.BU_EXACTFIT)
+            hsizer.Add(padding, 0, wx.EXPAND | wx.ALL)
+
+        self.SetSizerAndFit(hsizer)
+        if not self.IsDoubleBuffered():
+            self.SetDoubleBuffered(True)  # Reduce flicker on size event?
+
+        return hsizer
+
+    def GetIconSize(self):
+        width = self.requested_text_width + self.inner_spacing + self.bitmap_size[0]
+        height = max(self.text_size[1], self.bitmap_size[1])
+        return wx.Size(width, height)
+
+    def GetSpriteSize(self):
+        return wx.Size(self.requested_icon_height, self.requested_icon_height)
+
+    def GetTextSize(self):
+        dc = wx.ScreenDC()
+        size = dc.GetTextExtent(self.fsfile.leafname)
+        return wx.Size(size[0] + 4, size[1])
+
+    def GetTextIcon(self):
+        text_icon = wx.Button(self, -1, label=self.fsfile.leafname,
+                              style=wx.BU_LEFT | wx.ALIGN_LEFT | wx.BORDER_NONE)
+
+        text_icon.SetMaxSize(self.text_size)
+        text_icon.SetMinSize(self.text_size)
+
+        return text_icon
+
+
 class FSExplorerPanel(scrolled.ScrolledPanel):
 
-    min_icon_width = 96
+    min_text_width = 96
     icon_padding = 4
-    icon_spacing = 8
+    icon_spacing = 4
     icon_height = 56
+    default_display_format = 'large'
 
     def __init__(self, parent, *args, **kwargs):
         self.parent = parent
+        self.display_format = kwargs.pop('display_format', self.default_display_format)
 
         kwargs['style'] = wx.VSCROLL
         super(FSExplorerPanel, self).__init__(parent, *args, **kwargs)
@@ -214,11 +303,17 @@ class FSExplorerPanel(scrolled.ScrolledPanel):
             size = dc.GetTextExtent(fsfile.leafname)
             self.text_width[fsfile.leafname] = size[0] + self.icon_padding
 
-        icon_width = self.min_icon_width
-        icon_width = max(icon_width, *self.text_width.values())
+        size = dc.GetTextExtent("M_^")
+        text_height = size[1]
+
+        text_width = self.min_text_width
+        text_width = max(text_width, *self.text_width.values())
 
         for fsfile in self.parent.files:
-            btn = FSFileIcon(self.parent, self, icon_width, self.icon_height, fsfile)
+            if self.display_format == 'large':
+                btn = FSFileLargeIcon(self.parent, self, text_width, text_height, fsfile)
+            else:
+                btn = FSFileSmallIcon(self.parent, self, text_width, text_height, fsfile)
             filer_sizer.Add(btn, 0, wx.ALL, self.icon_spacing)
             self.icons[fsfile.leafname] = btn
 
@@ -276,12 +371,14 @@ class FSExplorerFrame(wx.Frame):
     default_width = 640
     default_height = 480
     mouse_model_riscos = False
+    default_display_format = 'large'
 
     def __init__(self, fs, dirname, *args, **kwargs):
         self.fs = fs
         self.dirname = dirname
         self.fsdir = self.fs.dir(dirname)
         self.explorers = kwargs.pop('explorers', None)
+        self.display_format = kwargs.pop('display_format', self.default_display_format)
         self.panel = None
         self._title_text = None
         self._title_widget = None
@@ -310,11 +407,16 @@ class FSExplorerFrame(wx.Frame):
 
         # Build up the menu we'll use
         self.menu = wx.Menu()
+        self.add_menu_display(self.menu)
         self.add_menu_selection(self.menu)
 
     def add_menuitem(self, menu, name, func):
         menuitem = menu.Append(-1, name, kind=wx.ITEM_NORMAL)
         self.Bind(wx.EVT_MENU, func, menuitem)
+
+    def add_menu_display(self, menu):
+        self.add_menuitem(menu, 'Large icons', lambda event: self.SetDisplayFormat('large'))
+        self.add_menuitem(menu, 'Small icons', lambda event: self.SetDisplayFormat('small'))
 
     def add_menu_selection(self, menu):
         self.add_menuitem(menu, 'Select all', lambda event: self.SelectAll())
@@ -370,7 +472,8 @@ class FSExplorerFrame(wx.Frame):
         self.files = sorted(self.fsdir.files, key=lambda f: f.leafname.lower())
 
         # Make a title area and sizer for the upper part of the panel
-        self.panel = FSExplorerPanel(self)
+        self.panel = FSExplorerPanel(self, display_format=self.display_format)
+        self.Layout()
 
         if self.explorers:
             self.explorers.update_opened(self.dirname, self)
@@ -388,6 +491,12 @@ class FSExplorerFrame(wx.Frame):
         self.dirname = dirname
         self.fsdir = self.fs.dir(dirname)
         self.create_panel()
+        self.UpdateFrameTitleText()
+
+    def SetDisplayFormat(self, display_format):
+        self.display_format = display_format
+        self.create_panel()
+        # The title text might be affected by the display format
         self.UpdateFrameTitleText()
 
     def SelectFile(self, leafname, state=True):
@@ -444,5 +553,6 @@ class FSExplorerFrame(wx.Frame):
         win = FSExplorerFrame(self.fs, target, None, -1,
                               explorers=self.explorers,
                               pos=pos,
-                              size=(self.default_width, self.default_height))
+                              size=(self.default_width, self.default_height),
+                              display_format=self.display_format)
         win.Show(True)
