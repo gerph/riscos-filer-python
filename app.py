@@ -41,8 +41,8 @@ class DemoFrame(wx.Frame):
 
         self.Bind(wx.EVT_CLOSE, self.OnQuit)
 
-        self.explorers = fsexplorer.FSExplorers()
         self.fs = fsnative.FSNative(os.path.expanduser('~'))
+        self.explorers = fsexplorer.FSExplorers(self.fs)
 
         win = fsexplorer.FSExplorerFrame(self.fs, '/', self, -1, size=(640, 480), explorers=self.explorers)
         win.Show(True)

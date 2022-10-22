@@ -346,24 +346,6 @@ class FSExplorerPanel(scrolled.ScrolledPanel):
         return region
 
 
-class FSExplorers(object):
-    """
-    An object that tracks the explorer frames.
-    """
-
-    def __init__(self):
-        self.open_windows = {}
-
-    def update_closed(self, dirname):
-        del self.open_windows[dirname]
-
-    def update_opened(self, dirname, window):
-        self.open_windows[dirname] = window
-
-    def find_window(self, dirname):
-        return self.open_windows.get(dirname, None)
-
-
 class FSFileInfoPanel(wx.Panel):
 
     outer_border = 8
@@ -678,12 +660,7 @@ class FSExplorerFrame(wx.Frame):
             self.OpenExplorer(target, pos=pos)
 
     def OpenExplorer(self, target, pos):
-        win = FSExplorerFrame(self.fs, target, None, -1,
-                              explorers=self.explorers,
-                              pos=pos,
-                              size=(self.default_width, self.default_height),
-                              display_format=self.display_format)
-        win.Show(True)
+        self.explorers.open_window(target, pos, self.display_format)
 
     def OnSelectionInfo(self):
         for fsicon in self.panel.icons.values():
@@ -695,3 +672,41 @@ class FSExplorerFrame(wx.Frame):
             print("Info: %r" % (fsfile,))
         fsfileinfo = FSFileInfoFrame(self, fsfile)
         fsfileinfo.Show()
+
+
+class FSExplorers(object):
+    """
+    An object that tracks the explorer frames.
+    """
+    explorer_frame_cls = FSExplorerFrame
+
+    # The default size of a window, or None to use the explorer_frame_cls values
+    default_width = None
+    default_height = None
+
+    def __init__(self, fs):
+        self.fs = fs
+        self.open_windows = {}
+        self.default_width = self.default_width or self.explorer_frame_cls.default_width
+        self.default_height = self.default_height or self.explorer_frame_cls.default_height
+
+    def update_closed(self, dirname):
+        del self.open_windows[dirname]
+
+    def update_opened(self, dirname, window):
+        self.open_windows[dirname] = window
+
+    def find_window(self, dirname):
+        return self.open_windows.get(dirname, None)
+
+    def open_window(self, dirname, pos=None, display_format=None):
+        openwindow = self.find_window(dirname)
+        if openwindow:
+            openwindow.Raise()
+        else:
+            win = self.explorer_frame_cls(self.fs, dirname, None, -1,
+                                          explorers=self,
+                                          pos=pos,
+                                          size=(self.default_width, self.default_height),
+                                          display_format=display_format)
+            win.Show(True)
