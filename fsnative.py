@@ -32,18 +32,11 @@ class FSNative(FSBase):
         """
         return FSFileNative(self, '/')
 
-    def dir(self, dirname):
+    def get_dir(self, dirname, parent_fsdir=None):
         """
-        Return a given directory for a given filesystem.
+        Overloadable: Return a given directory for a given filesystem.
         """
-        parts = self.split(dirname)
-        fsdir = self.rootdir()
-        for index in range(0, len(parts)):
-            dirparts = parts[0:index + 1]
-            filename = self.join(*dirparts)
-            fsdir = FSDirectoryNative(self, fsdir, filename)
-
-        return fsdir
+        return FSDirectoryNative(self, parent_fsdir, dirname)
 
     def native_filename(self, filename):
         if self.anchor == '/' and self.dirsep == '/':

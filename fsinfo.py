@@ -9,6 +9,7 @@ import wx.lib.agw.ultimatelistctrl as ULC
 class FSFileInfoPanel(wx.Panel):
 
     outer_border = 8
+    inner_spacing = 24
 
     def __init__(self, parent, fsfile):
         self.parent = parent
@@ -41,7 +42,7 @@ class FSFileInfoPanel(wx.Panel):
         self.SetAutoLayout(True)
 
     def GetBestSize(self):
-        width = self.list.GetColumnWidth(0) + self.list.GetColumnWidth(1)
+        width = self.list.GetColumnWidth(0) + self.inner_spacing + self.list.GetColumnWidth(1)
         height = (self.list.GetUserLineHeight() + 1) * self.list.GetItemCount()
         return wx.Size(width + self.outer_border * 2,
                        height + self.outer_border * 2)
@@ -65,16 +66,20 @@ class FSFileInfoPanel(wx.Panel):
         self.list.InsertColumnInfo(1, info)
 
         dc = wx.ScreenDC()
+        dc.SetFont(wx.SystemSettings.GetFont(wx.SYS_SYSTEM_FONT))
 
-        maxwidth = 96
+        maxfieldwidth = 96
+        maxvaluewidth = 96
         maxheight = 8
         index = 0
         fields = []
         for field, generator in self.field_generators:
             value = generator(self.fsfile)
-            size = dc.GetTextExtent(field)
-            maxwidth = max(maxwidth, size[0])
-            maxheight = max(maxheight, size[1])
+            field_size = dc.GetTextExtent(field)
+            value_size = dc.GetTextExtent(value)
+            maxfieldwidth = max(maxfieldwidth, field_size[0])
+            maxvaluewidth = max(maxvaluewidth, value_size[0])
+            maxheight = max(maxheight, field_size[1])
             fields.append((field, value))
 
         self.list.SetUserLineHeight(int(maxheight * 1.5))
@@ -86,10 +91,12 @@ class FSFileInfoPanel(wx.Panel):
 
         # The wx.LIST_AUTOSIZE doesn't seem to work here, so we calculate
         # the field widths ourselves.
-        self.list.SetColumnWidth(0, maxwidth)
+        self.list.SetColumnWidth(0, maxfieldwidth)
         self.list.SetColumnWidth(1, ULC.ULC_AUTOSIZE_FILL)
 
     def format_filetype(self, fsfile):
+        if fsfile.isdir():
+            return "Directory"
         return "&{:03X}".format(fsfile.filetype())
 
     def format_size(self, fsfile):
@@ -101,6 +108,9 @@ class FSFileInfoPanel(wx.Panel):
 
 class FSFileInfoFrame(wx.Frame):
 
+    # Allow more space for the title text (eg for the buttons in the title)
+    title_extra_size = 80
+
     def __init__(self, parent, fsfile, *args, **kwargs):
         self.parent = parent
         self.fsfile = fsfile
@@ -110,5 +120,11 @@ class FSFileInfoFrame(wx.Frame):
 
         self.panel = FSFileInfoPanel(self, fsfile)
 
-        self.SetMaxClientSize(self.panel.GetBestSize())
-        self.SetClientSize(self.panel.GetBestSize())
+        size = self.panel.GetBestSize()
+        # Allow for the size of the title
+        dc = wx.ScreenDC()
+        title_size = dc.GetTextExtent(kwargs['title'])
+        size = wx.Size(max(title_size[0] + self.title_extra_size, size[0]), size[1])
+
+        self.SetMaxClientSize(size)
+        self.SetClientSize(size)

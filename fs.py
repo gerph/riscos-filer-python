@@ -17,9 +17,10 @@ class FSNotADirectoryError(FSError):
 class FSBase(object):
 
     dirsep = '/'
+    do_caching = True
 
     def __init__(self):
-        pass
+        self.cached_dirs = {}
 
     def __repr__(self):
         return "<{}()>".format(self.__class__.__name__)
@@ -34,11 +35,33 @@ class FSBase(object):
         """
         Return the root directory for a given filesystem.
         """
-        raise NotImplementedError("{}.root() is not implemented".format(self.__class__.__name__))
+        return self.dir(self.rootname())
 
     def dir(self, dirname):
         """
-        Return a given directory for a given filesystem.
+        Return a given directory for a given filesystem (through the cache).
+        """
+        if self.do_caching:
+            fsdir = self.cached_dirs.get(dirname, None)
+            if fsdir is not None:
+                return fsdir
+
+        # We recurse upwards, trying to get earlier dirs so that we have all the
+        # directories cached, if we need to. Or we'll report errors if the directory
+        # did not exist.
+        parent = self.dirname(dirname)
+        parent_fsdir = None
+        if dirname != parent:
+            parent_fsdir = self.dir(parent)
+
+        fsdir = self.get_dir(dirname, parent_fsdir)
+        if self.do_caching:
+            self.cached_dirs[dirname] = fsdir
+        return fsdir
+
+    def get_dir(self, dirname, parent_fsdir=None):
+        """
+        Overloadable: Return a given directory for a given filesystem.
         """
         raise NotImplementedError("{}.dir() is not implemented".format(self.__class__.__name__))
 
@@ -83,7 +106,7 @@ class FSBase(object):
     def dirname(self, filename):
         parts = self.split(filename)
         if len(parts) > 1:
-            return self.join(parts[:-1])
+            return self.join(*parts[:-1])
         else:
             return self.rootname()
 
@@ -216,7 +239,8 @@ class FSDirectoryBase(object):
             self._files = {}
             for f in filelist:
                 fsfile = self.get_file(f)
-                self._files[fsfile.leafname] = fsfile
+                namekey = self.fs.normalise_name(fsfile.leafname)
+                self._files[namekey] = fsfile
 
     @property
     def files(self):
