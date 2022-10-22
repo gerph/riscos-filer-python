@@ -80,10 +80,11 @@ class FSFileBase(object):
     TYPE_DIRECTORY = 0x1000
     TYPE_LOADEXEC = -1
 
-    def __init__(self, fs, filename, parent=None):
+    def __init__(self, fs, filename, size=None, parent=None):
         self.fs = fs
         self.filename = filename
         self.leafname = self.fs.leafname(self.filename)
+        self._size = size
         self._parent = parent
 
     def __repr__(self):
@@ -105,6 +106,12 @@ class FSFileBase(object):
     def filetype(self):
         # Unknown type always goes to data.
         return self.TYPE_DATA
+
+    def size(self):
+        # Return the size we gave on creation
+        if self._size is None:
+            return -1
+        return self._size
 
 
 class FSDirectoryBase(object):

@@ -54,11 +54,23 @@ class FSFileNative(FSFileBase):
         super(FSFileNative, self).__init__(fs, filename, parent)
         self.native_filename = self.fs.native_filename(self.filename)
         self._isdir = None
+        self._stat_read = False
 
     def isdir(self):
         if self._isdir is None:
             self._isdir = os.path.isdir(self.native_filename)
         return self._isdir
+
+    def _stat(self):
+        if not self._stat_read:
+            stat = os.stat(self.native_filename)
+            self._size = stat.st_size
+            self._stat_read = True
+        return
+
+    def size(self):
+        self._stat()
+        return super(FSFileNative, self).size()
 
 
 class FSDirectoryNative(FSDirectoryBase):
