@@ -700,9 +700,9 @@ class FSExplorers(object):
         return self.open_windows.get(dirname, None)
 
     def open_window(self, dirname, pos=None, display_format=None):
-        openwindow = self.find_window(dirname)
-        if openwindow:
-            openwindow.Raise()
+        win = self.find_window(dirname)
+        if win:
+            win.Raise()
         else:
             win = self.explorer_frame_cls(self.fs, dirname, None, -1,
                                           explorers=self,
@@ -710,3 +710,5 @@ class FSExplorers(object):
                                           size=(self.default_width, self.default_height),
                                           display_format=display_format)
             win.Show(True)
+
+        return win

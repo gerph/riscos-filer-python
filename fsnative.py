@@ -26,6 +26,12 @@ class FSNative(FSBase):
         """
         return FSDirectoryNative(self, None, self.rootname())
 
+    def rootinfo(self):
+        """
+        Return a FSFileInfo for the root.
+        """
+        return FSFileNative(self, '/')
+
     def dir(self, dirname):
         """
         Return a given directory for a given filesystem.

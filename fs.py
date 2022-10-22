@@ -10,6 +10,10 @@ class FSFileNotFoundError(FSError):
     pass
 
 
+class FSNotADirectoryError(FSError):
+    pass
+
+
 class FSBase(object):
 
     dirsep = '/'
@@ -37,6 +41,20 @@ class FSBase(object):
         Return a given directory for a given filesystem.
         """
         raise NotImplementedError("{}.dir() is not implemented".format(self.__class__.__name__))
+
+    def rootinfo(self):
+        """
+        Return a FSFileInfo for the root.
+        """
+        raise NotImplementedError("{}.rootinfo() is not implemented".format(self.__class__.__name__))
+
+    def fileinfo(self, filename):
+        dirname = self.dirname(filename)
+        leafname = self.leafname(filename)
+        if dirname == self.rootname and leafname == '':
+            return self.rootinfo()
+        fsdir = self.dir(dirname)
+        return fsdir[leafname]
 
     def normalise_name(self, name):
         """
@@ -71,6 +89,8 @@ class FSBase(object):
 
     def leafname(self, filename):
         parts = self.split(filename)
+        if len(parts) == 0:
+            return ''
         return parts[-1]
 
 
@@ -101,7 +121,25 @@ class FSFileBase(object):
         return self.leafname < other.leafname
 
     def isdir(self):
+        """
+        Is this object a directory?
+        """
         return False
+
+    def dir(self):
+        """
+        Obtain a FSDirectory for this object, if this is directory.
+        """
+        if not self.isdir():
+            raise FSNotADirectoryError("FSFile '{}' is not a directory".format(self.filename))
+        return self.fs.dir(self.filename)
+
+    def parent(self):
+        """
+        Obtain a FSDirectory for the parent directory of this object.
+        """
+        dirname = self.fs.dirname(self.filename)
+        return self.fs.dir(dirname)
 
     def filetype(self):
         # Unknown type always goes to data.
@@ -158,7 +196,8 @@ class FSDirectoryBase(object):
         elif isinstance(name_or_index, (str, unicode)):
 
             namekey = self.fs.normalise_name(name_or_index)
-            fsfile = self.files.get(namekey, None)
+            self.populate_files()
+            fsfile = self._files.get(namekey, None)
             if fsfile is None:
                 raise FSFileNotFoundError("File '{}' not found in {}".format(name_or_index,
                                                                              self.dirname))
@@ -170,11 +209,7 @@ class FSDirectoryBase(object):
     def __len__(self):
         return len(self.files)
 
-    @property
-    def files(self):
-        """
-        Return a list of objects for files within this directory
-        """
+    def populate_files(self):
         if self._files is None:
             filelist = self.get_filelist()
 
@@ -182,5 +217,12 @@ class FSDirectoryBase(object):
             for f in filelist:
                 fsfile = self.get_file(f)
                 self._files[fsfile.leafname] = fsfile
+
+    @property
+    def files(self):
+        """
+        Return a list of objects for files within this directory
+        """
+        self.populate_files()
 
         return sorted(self._files.values())
