@@ -123,11 +123,12 @@ class FSFileBase(object):
     TYPE_DIRECTORY = 0x1000
     TYPE_LOADEXEC = -1
 
-    def __init__(self, fs, filename, size=None, parent=None):
+    def __init__(self, fs, filename, size=None, epochtime=None, parent=None):
         self.fs = fs
         self.filename = filename
         self.leafname = self.fs.leafname(self.filename)
         self._size = size
+        self._epochtime = epochtime
         self._parent = parent
 
     def __repr__(self):
@@ -173,6 +174,12 @@ class FSFileBase(object):
         if self._size is None:
             return -1
         return self._size
+
+    def epochtime(self):
+        # Return the Unix epoch time we gave on creation
+        if self._epochtime is None:
+            return 0
+        return self._epochtime
 
 
 class FSDirectoryBase(object):

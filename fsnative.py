@@ -64,12 +64,17 @@ class FSFileNative(FSFileBase):
         if not self._stat_read:
             stat = os.stat(self.native_filename)
             self._size = stat.st_size
+            self._epochtime = stat.st_mtime
             self._stat_read = True
         return
 
     def size(self):
         self._stat()
         return super(FSFileNative, self).size()
+
+    def epochtime(self):
+        self._stat()
+        return super(FSFileNative, self).epochtime()
 
 
 class FSDirectoryNative(FSDirectoryBase):
