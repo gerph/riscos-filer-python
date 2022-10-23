@@ -181,6 +181,22 @@ class FSFileBase(object):
             return 0
         return self._epochtime
 
+    def open(self, mode='rb'):
+        """
+        Open the file, returning an io like file handle
+
+        @param mode:    Textual mode, like 'r', 'rb', 'w', 'wb'.
+        """
+        raise NotImplementedError("{}.open() is not implemented".format(self.__class__.__name__))
+
+    def read(self):
+        """
+        Read the contents of the file.
+        """
+        with self.open('rb') as fh:
+            data = fh.read()
+            return data
+
 
 class FSDirectoryBase(object):
     """
