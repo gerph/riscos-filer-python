@@ -68,6 +68,14 @@ class FSFileNative(FSFileBase):
             self._stat_read = True
         return
 
+    def open(self, mode='rb'):
+        """
+        Open the file, returning an io like file handle
+
+        @param mode:    Textual mode, like 'r', 'rb', 'w', 'wb'.
+        """
+        return open(self.native_filename, mode)
+
     def size(self):
         self._stat()
         return super(FSFileNative, self).size()

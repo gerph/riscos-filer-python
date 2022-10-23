@@ -523,6 +523,11 @@ class FSExplorerFrame(wx.Frame):
     def DeselectAll(self):
         self.SelectAll(state=False)
 
+    def ApplySelectedFiles(self, func):
+        for fsicon in self.panel.icons.values():
+            if fsicon.selected:
+                func(fsicon.fsfile)
+
     def on_file_menu(self, fsfile):
         if self.debug:
             print("Menu: %r" % (fsfile,))
@@ -565,9 +570,7 @@ class FSExplorerFrame(wx.Frame):
         self.explorers.open_window(target, pos, self.display_format)
 
     def OnSelectionInfo(self):
-        for fsicon in self.panel.icons.values():
-            if fsicon.selected:
-                self.OnFileInfo(fsicon.fsfile)
+        self.ApplySelectedFiles(self.OnFileInfo)
 
     def OnFileInfo(self, fsfile):
         if self.debug:

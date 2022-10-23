@@ -135,6 +135,7 @@ class FSBase(object):
 class FSFileBase(object):
     TYPE_DATA = 0xFFD
     TYPE_DIRECTORY = 0x1000
+    TYPE_IMAGE = 0x3000
     TYPE_LOADEXEC = -1
 
     def __init__(self, fs, filename, size=None, epochtime=None, parent=None):

@@ -98,15 +98,27 @@ class FSFileInfoPanel(wx.Panel):
         self.list.SetColumnWidth(1, wx.LIST_AUTOSIZE)
 
     def format_filetype(self, fsfile):
-        if fsfile.isdir():
+        filetype = fsfile.filetype()
+        if filetype == fsfile.TYPE_DIRECTORY or fsfile.isdir():
             return "Directory"
-        return "&{:03X}".format(fsfile.filetype())
+        if filetype == fsfile.TYPE_LOADEXEC:
+            return "Untyped"
+
+        if filetype >= fsfile.TYPE_IMAGE:
+            return "Image file (&{:03X})".format(filetype)
+
+        return "&{:03X}".format(filetype)
 
     def format_size(self, fsfile):
-        return "{} bytes".format(fsfile.size())
+        size = fsfile.size()
+        if size == -1 or size is None:
+            return "Unknown"
+        return "{} bytes".format(size)
 
     def format_timestamp(self, fsfile):
         epochtime = fsfile.epochtime()
+        if epochtime is None:
+            return "Unknown"
         dt = datetime.datetime.utcfromtimestamp(epochtime)
         return dt.strftime('%H:%M:%S.X %d %b %Y').replace('X', '{:02}'.format(dt.microsecond / 10000))
 
