@@ -399,6 +399,7 @@ class FSExplorerFrame(wx.Frame):
         self.menu.Append(-1, 'Display', self.display_menu)
         self.menu.Append(-1, 'Selection', self.selection_menu)
         self.add_menu_selection(self.menu)
+        self.add_menu_dirop(self.menu)
 
     def add_menuitem(self, menu, name, func):
         menuitem = menu.Append(-1, name, kind=wx.ITEM_NORMAL)
@@ -424,6 +425,9 @@ class FSExplorerFrame(wx.Frame):
         """
         # FIXME: Make this able to grey items if they are inappropriate
         self.add_menuitem(menu, 'Info...', lambda event: self.OnSelectionInfo())
+
+    def add_menu_dirop(self, menu):
+        self.add_menuitem(menu, 'Refresh directory', lambda event: self.RefreshDirectory())
 
     def on_key(self, event, down):
         keycode = event.GetKeyCode()
@@ -480,6 +484,11 @@ class FSExplorerFrame(wx.Frame):
 
         if self.explorers:
             self.explorers.update_opened(self.dirname, self)
+
+    def RefreshDirectory(self):
+        self.fs.invalidate_dir(self.dirname)
+        self.fsdir.invalidate()
+        self.create_panel()
 
     def Close(self):
         super(FSExplorerFrame, self).Close()

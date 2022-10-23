@@ -41,8 +41,10 @@ class FSBase(object):
         """
         Return a given directory for a given filesystem (through the cache).
         """
+        cache_key = None
         if self.do_caching:
-            fsdir = self.cached_dirs.get(dirname, None)
+            cache_key = self.normalise_name(dirname)
+            fsdir = self.cached_dirs.get(cache_key, None)
             if fsdir is not None:
                 return fsdir
 
@@ -56,7 +58,7 @@ class FSBase(object):
 
         fsdir = self.get_dir(dirname, parent_fsdir)
         if self.do_caching:
-            self.cached_dirs[dirname] = fsdir
+            self.cached_dirs[cache_key] = fsdir
         return fsdir
 
     def get_dir(self, dirname, parent_fsdir=None):
@@ -64,6 +66,18 @@ class FSBase(object):
         Overloadable: Return a given directory for a given filesystem.
         """
         raise NotImplementedError("{}.dir() is not implemented".format(self.__class__.__name__))
+
+    def invalidate_dir(self, dirname):
+        """
+        Invalidate the cache for a given directory name.
+        """
+        if self.do_caching:
+            cache_key = self.normalise_name(dirname)
+            if cache_key in self.cached_dirs:
+                # We can just call the invalidate function in the cached directory.
+                self.cached_dirs[cache_key].invalidate()
+        # If we aren't caching, we hope that the user is able to invalidate any context
+        # they hold.
 
     def rootinfo(self):
         """
@@ -254,6 +268,9 @@ class FSDirectoryBase(object):
 
     def __len__(self):
         return len(self.files)
+
+    def invalidate(self):
+        self._files = None
 
     def populate_files(self):
         if self._files is None:
