@@ -388,6 +388,7 @@ class FSExplorerFrame(wx.Frame):
         # We want regular characters for the cases where we're controlling by
         # the keyboard.
         self.panel.Bind(wx.EVT_CHAR, self.on_key_char)
+        self.Bind(wx.EVT_CLOSE, self.on_close)
 
         # Build up the menu we'll use
         self.display_menu = wx.Menu()
@@ -483,17 +484,18 @@ class FSExplorerFrame(wx.Frame):
         self.Layout()
 
         if self.explorers:
-            self.explorers.update_opened(self.dirname, self)
+            self.explorers.window_has_opened(self.dirname, self)
 
     def RefreshDirectory(self):
         self.fs.invalidate_dir(self.dirname)
         self.fsdir.invalidate()
         self.create_panel()
 
-    def Close(self):
-        super(FSExplorerFrame, self).Close()
+    def on_close(self, event):
         if self.explorers:
-            self.explorers.update_closed(self.dirname)
+            self.explorers.window_has_closed(self.dirname)
+        # This event is informational, so we pass on.
+        event.Skip()
 
     def ChangeDirectory(self, dirname):
         if self.panel:
@@ -533,6 +535,14 @@ class FSExplorerFrame(wx.Frame):
             print("Menu: %r" % (fsfile,))
         self.PopupMenu(self.menu)
 
+    def GetNextFramePos(self):
+        """
+        Return a position on the screen for the next window to open at.
+        """
+        pos = self.GetPosition()
+        pos = (pos.x + self.open_offset_x, pos.y + self.open_offset_y)
+        return pos
+
     def OnFileActivate(self, fsfile, close=False, shift=None):
         if self.debug:
             print("Activate: %r" % (fsfile,))
@@ -562,8 +572,7 @@ class FSExplorerFrame(wx.Frame):
         if close:
             self.ChangeDirectory(target)
         else:
-            pos = self.GetPosition()
-            pos = (pos.x + self.open_offset_x, pos.y + self.open_offset_y)
+            pos = self.GetNextFramePos()
             self.OpenExplorer(target, pos=pos)
 
     def OpenExplorer(self, target, pos):
@@ -575,10 +584,11 @@ class FSExplorerFrame(wx.Frame):
     def OnFileInfo(self, fsfile):
         if self.debug:
             print("Info: %r" % (fsfile,))
+        pos = self.GetNextFramePos()
         if self.explorers:
-            self.explorers.open_fileinfo(fsfile.filename)
+            self.explorers.open_fileinfo(fsfile.filename, pos=pos)
         else:
-            fsfileinfo = FSFileInfoFrame(self, fsfile)
+            fsfileinfo = FSFileInfoFrame(self, fsfile, pos=pos)
             fsfileinfo.Show()
 
 
@@ -587,6 +597,7 @@ class FSExplorers(object):
     An object that tracks the explorer frames.
     """
     explorer_frame_cls = FSExplorerFrame
+    fileinfo_frame_cls = FSFileInfoFrame
 
     # The default size of a window, or None to use the explorer_frame_cls values
     default_width = None
@@ -595,17 +606,48 @@ class FSExplorers(object):
     def __init__(self, fs):
         self.fs = fs
         self.open_windows = {}
+        self.open_fileinfos = {}
         self.default_width = self.default_width or self.explorer_frame_cls.default_width
         self.default_height = self.default_height or self.explorer_frame_cls.default_height
 
-    def update_closed(self, dirname):
-        del self.open_windows[dirname]
+    def fsfile_key(self, filename):
+        """
+        Return a key for the file that has been requested.
 
-    def update_opened(self, dirname, window):
-        self.open_windows[dirname] = window
+        For systems like Windows or RISC OS, this will be a case insensitive name,
+        but for Linux might be an identity.
+        """
+        filenamekey = self.fs.normalise_name(filename)
+        return filenamekey
+
+    def window_has_closed(self, dirname):
+        filenamekey = self.fsfile_key(dirname)
+        del self.open_windows[filenamekey]
+
+    def window_has_opened(self, dirname, window):
+        filenamekey = self.fsfile_key(dirname)
+        if filenamekey in self.open_windows:
+            # If there was a window already, force it to close so that we don't get multiple windows on the screen.
+            # Shouldn't happen if these functions are called consistently.
+            self.open_windows[filenamekey].Close()
+        self.open_windows[filenamekey] = window
+
+    def fileinfo_has_closed(self, filename):
+        filenamekey = self.fsfile_key(filename)
+        del self.open_fileinfos[filenamekey]
+
+    def fileinfo_has_opened(self, filename, window):
+        filenamekey = self.fsfile_key(filename)
+        if filenamekey in self.open_fileinfos:
+            # If there was a window already, force it to close so that we don't get multiple windows on the screen.
+            # Shouldn't happen if these functions are called consistently.
+            self.open_fileinfos[filenamekey].Close()
+
+        self.open_fileinfos[filenamekey] = window
 
     def find_window(self, dirname):
-        return self.open_windows.get(dirname, None)
+        filenamekey = self.fsfile_key(dirname)
+        return self.open_windows.get(filenamekey, None)
 
     def open_window(self, dirname, pos=None, display_format=None):
         win = self.find_window(dirname)
@@ -621,7 +663,15 @@ class FSExplorers(object):
 
         return win
 
+    def find_fileinfo(self, filename):
+        filenamekey = self.fsfile_key(filename)
+        return self.open_fileinfos.get(filenamekey, None)
+
     def open_fileinfo(self, filename, pos=None):
-        fsfile = self.fs.fileinfo(filename)
-        fsfileinfo = FSFileInfoFrame(self, fsfile)
-        fsfileinfo.Show()
+        win = self.find_fileinfo(filename)
+        if win:
+            win.Raise()
+        else:
+            fsfile = self.fs.fileinfo(filename)
+            fsfileinfo = self.fileinfo_frame_cls(self, fsfile, pos=pos, explorers=self)
+            fsfileinfo.Show()

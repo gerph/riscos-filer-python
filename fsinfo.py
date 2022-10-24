@@ -131,6 +131,7 @@ class FSFileInfoFrame(wx.Frame):
     def __init__(self, parent, fsfile, *args, **kwargs):
         self.parent = parent
         self.fsfile = fsfile
+        self.explorers = kwargs.pop('explorers', None)
         kwargs['title'] = "File info: {}".format(fsfile.filename)
 
         super(FSFileInfoFrame, self).__init__(None, *args, **kwargs)
@@ -148,3 +149,13 @@ class FSFileInfoFrame(wx.Frame):
 
         self.SetMaxClientSize(size)
         self.SetClientSize(size)
+
+        self.Bind(wx.EVT_CLOSE, self.on_close)
+        if self.explorers:
+            self.explorers.fileinfo_has_opened(self.fsfile.filename, self)
+
+    def on_close(self, event):
+        if self.explorers:
+            self.explorers.fileinfo_has_closed(self.fsfile.filename)
+        # This event is informational, so we pass on.
+        event.Skip()
