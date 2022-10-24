@@ -591,8 +591,15 @@ class FSExplorerFrame(wx.Frame):
         text = self.GetFrameTitleText()
         self.SetTitle(text)
 
-    def create_panel(self):
+    def create_panel(self, keep_selection=True):
+        last_selection = set()
         if self.panel:
+            # Construct a list of the last selected icons in the panel
+            if keep_selection:
+                for fsicon in self.panel.icons.values():
+                    if fsicon.selected:
+                        last_selection.add(fsicon.fsfile.leafname)
+
             self.panel.Destroy()
             self.panel = None
 
@@ -601,6 +608,10 @@ class FSExplorerFrame(wx.Frame):
         # Make a title area and sizer for the upper part of the panel
         self.panel = FSExplorerPanel(self, display_format=self.display_format)
         self.Layout()
+
+        # Now re-select the old selection
+        for leafname in last_selection:
+            self.SelectFile(leafname)
 
         if self.explorers:
             self.explorers.window_has_closed(self.dirname)
@@ -620,11 +631,11 @@ class FSExplorerFrame(wx.Frame):
     def ChangeDirectory(self, dirname):
         if self.panel:
             if self.explorers:
-                self.explorers.update_closed(self.dirname)
+                self.explorers.window_has_closed(self.dirname)
 
         self.dirname = dirname
         self.fsdir = self.fs.dir(dirname)
-        self.create_panel()
+        self.create_panel(keep_selection=False)
         self.UpdateFrameTitleText()
 
     def SetDisplayFormat(self, display_format):
