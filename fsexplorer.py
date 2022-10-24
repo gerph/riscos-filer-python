@@ -74,12 +74,11 @@ class FSFileIcon(wx.Panel):
         self.sprite_icon = self.GetSpriteIcon()
         self.text_icon = self.GetTextIcon()
 
-        self.icons = (self.sprite_icon, self.text_icon)
-
         self.SetMaxSize(self.icon_size)
         self.SetMinSize(self.icon_size)
 
         self.sizer = self.SetupSizer()
+        self.icons = self.GetButtonIcons()
 
         for obj in self.icons:
             obj.Bind(wx.EVT_LEFT_DOWN, self.on_click)
@@ -100,6 +99,9 @@ class FSFileIcon(wx.Panel):
             self.SetDoubleBuffered(True)  # Reduce flicker on size event.
 
         return vsizer
+
+    def GetButtonIcons(self):
+        return [self.sprite_icon, self.text_icon]
 
     def GetIconSize(self):
         width = max(self.text_size[0], self.bitmap_size[0])
@@ -218,6 +220,46 @@ class FSFileIcon(wx.Panel):
                 self.frame.on_file_menu(self.fsfile)
 
 
+class LeftAlignedIcons(object):
+
+    def __init__(self, parent, text=None, total_width=0, text_icon=None):
+        self.hsizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.parent = parent
+        self.icons = []
+        self.text_width = 0
+        self.text_height = 0
+
+        # The main text icon
+        if text is not None:
+            text_icon = wx.Button(self.parent, -1, label=text.replace('&', '&&'),
+                                  style=wx.BU_LEFT | wx.ALIGN_LEFT | wx.BORDER_NONE)
+
+            dc = wx.ScreenDC()
+            size = dc.GetTextExtent(text)
+            self.text_width = size[0] + 4
+            self.text_height = size[1]
+
+            size = wx.Size(self.text_width, self.text_height)
+            text_icon.SetMaxSize(size)
+            text_icon.SetMinSize(size)
+
+        else:
+            (self.text_width, self.text_height) = text_icon.GetMaxSize()
+
+        self.text_icon = text_icon
+        self.icons.append(self.text_icon)
+        self.hsizer.Add(self.text_icon, 0, 0, 0)
+
+        # The padding that sits beside it
+        padding_width = total_width - self.text_width
+        if padding_width > 0:
+            padding = wx.Button(self.parent, -1, label='',
+                                size=wx.Size(padding_width, self.text_height),
+                                style=wx.BU_LEFT | wx.ALIGN_LEFT | wx.BORDER_NONE | wx.BU_EXACTFIT)
+            self.hsizer.Add(padding, 0, wx.EXPAND | wx.ALL)
+            self.icons.append(padding)
+
+
 class FSFileLargeIcon(FSFileIcon):
     pass
 
@@ -227,6 +269,7 @@ class FSFileSmallIcon(FSFileIcon):
 
     def __init__(self, frame, parent, text_width, text_height, fsfile, *args, **kwargs):
         kwargs['icon_height'] = self.icon_height
+        self.filename_icons = []
         super(FSFileSmallIcon, self).__init__(frame, parent, text_width, text_height, fsfile, *args, **kwargs)
 
     def SetupSizer(self):
@@ -234,20 +277,19 @@ class FSFileSmallIcon(FSFileIcon):
 
         hsizer.Add(self.sprite_icon, 0, wx.ALIGN_CENTER_VERTICAL, 0)
         hsizer.AddSpacer(self.inner_spacing)
-        hsizer.Add(self.text_icon, 0, 0, 0)
 
-        padding_width = self.icon_size[0] - self.bitmap_size[0] - self.inner_spacing - self.text_size[0]
-        if padding_width > 0:
-            padding = wx.Button(self, -1, label='',
-                                size=wx.Size(padding_width, self.text_size[1]),
-                                style=wx.BU_LEFT | wx.ALIGN_LEFT | wx.BORDER_NONE | wx.BU_EXACTFIT)
-            hsizer.Add(padding, 0, wx.EXPAND | wx.ALL)
+        self.filename_icons = LeftAlignedIcons(self, text_icon=self.text_icon, total_width=self.requested_text_width)
+        hsizer.Add(self.filename_icons.hsizer, 0, 0, 0)
+        self.AddExtraIcons(hsizer)
 
         self.SetSizerAndFit(hsizer)
         if not self.IsDoubleBuffered():
             self.SetDoubleBuffered(True)  # Reduce flicker on size event?
 
         return hsizer
+
+    def AddExtraIcons(self, hsizer):
+        pass
 
     def GetIconSize(self):
         width = self.requested_text_width + self.inner_spacing + self.bitmap_size[0]
@@ -270,6 +312,80 @@ class FSFileSmallIcon(FSFileIcon):
         text_icon.SetMinSize(self.text_size)
 
         return text_icon
+
+    def GetButtonIcons(self):
+        icons = [self.sprite_icon]
+        icons.extend(self.filename_icons.icons)
+        return icons
+
+
+class FSFileFullInfoIcon(FSFileSmallIcon):
+    # FIXME: This is not at all efficient - we should really rethink how these rows are drawn
+    # as lots of objects really makes it slow.
+    filetype_template_string = "MMMMMMMM"
+    timestamp_template_string = "00:00:00.00 00 MMM 0000"
+    size_template_string = "XXXXXXXXXX bytes"
+
+    cached_filetype_size = None
+    cached_timestamp_size = None
+    cached_size_size = None
+
+    def __init__(self, frame, parent, text_width, text_height, fsfile, *args, **kwargs):
+        super(FSFileFullInfoIcon, self).__init__(frame, parent, text_width, text_height, fsfile, *args, **kwargs)
+        self.filetype_size = None
+        self.size_icons = None
+        self.timestamp_icons = None
+        self.filetype_icons = None
+
+    def GetSizeSize(self):
+        if not self.cached_size_size:
+            dc = wx.ScreenDC()
+            size = dc.GetTextExtent(self.size_template_string)
+            self.__class__.cached_size_size = wx.Size(size[0] + 4, size[1])
+        return self.cached_size_size
+
+    def GetFiletypeSize(self):
+        if not self.cached_filetype_size:
+            dc = wx.ScreenDC()
+            size = dc.GetTextExtent(self.filetype_template_string)
+            self.__class__.cached_filetype_size = wx.Size(size[0] + 4, size[1])
+        return self.cached_filetype_size
+
+    def GetTimestampSize(self):
+        if not self.cached_timestamp_size:
+            dc = wx.ScreenDC()
+            size = dc.GetTextExtent(self.timestamp_template_string)
+            self.__class__.cached_timestamp_size = wx.Size(size[0] + 4, size[1])
+        return self.cached_timestamp_size
+
+    def GetIconSize(self):
+        width = self.requested_text_width + self.inner_spacing + self.bitmap_size[0]
+        width += self.inner_spacing + self.GetSizeSize()[0]
+        width += self.inner_spacing + self.GetFiletypeSize()[0]
+        width += self.inner_spacing + self.GetTimestampSize()[0]
+        height = max(self.text_size[1], self.bitmap_size[1])
+        return wx.Size(width, height)
+
+    def GetButtonIcons(self):
+        icons = [self.sprite_icon]
+        icons.extend(self.filename_icons.icons)
+        icons.extend(self.size_icons.icons)
+        icons.extend(self.filetype_icons.icons)
+        icons.extend(self.timestamp_icons.icons)
+        return icons
+
+    def AddExtraIcons(self, hsizer):
+        self.size_icons = LeftAlignedIcons(self, text=self.fsfile.format_size(), total_width=self.GetSizeSize()[0])
+        hsizer.Add(self.size_icons.hsizer, 0, 0, 0)
+        hsizer.AddSpacer(self.inner_spacing)
+
+        self.filetype_icons = LeftAlignedIcons(self, text=self.fsfile.format_filetype(), total_width=self.GetFiletypeSize()[0])
+        hsizer.Add(self.filetype_icons.hsizer, 0, 0, 0)
+        hsizer.AddSpacer(self.inner_spacing)
+
+        self.timestamp_icons = LeftAlignedIcons(self, text=self.fsfile.format_timestamp(), total_width=self.GetTimestampSize()[0])
+        hsizer.Add(self.timestamp_icons.hsizer, 0, 0, 0)
+        hsizer.AddSpacer(self.inner_spacing)
 
 
 class FSExplorerPanel(scrolled.ScrolledPanel):
@@ -314,8 +430,10 @@ class FSExplorerPanel(scrolled.ScrolledPanel):
         for fsfile in self.parent.files:
             if self.display_format == 'large':
                 btn = FSFileLargeIcon(self.parent, self, text_width, text_height, fsfile)
-            else:
+            elif self.display_format == 'small':
                 btn = FSFileSmallIcon(self.parent, self, text_width, text_height, fsfile)
+            else:
+                btn = FSFileFullInfoIcon(self.parent, self, text_width, text_height, fsfile)
             filer_sizer.Add(btn, 0, wx.ALL, self.icon_spacing)
             self.icons[fsfile.leafname] = btn
 
@@ -412,6 +530,7 @@ class FSExplorerFrame(wx.Frame):
         """
         self.add_menuitem(menu, 'Large icons', lambda event: self.SetDisplayFormat('large'))
         self.add_menuitem(menu, 'Small icons', lambda event: self.SetDisplayFormat('small'))
+        self.add_menuitem(menu, 'Full info', lambda event: self.SetDisplayFormat('fullinfo'))
 
     def add_menu_selection(self, menu):
         """

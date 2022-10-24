@@ -1,3 +1,8 @@
+"""
+Base classes for abstracting access to objects on a file system.
+"""
+
+import datetime
 import functools
 import os
 
@@ -211,6 +216,31 @@ class FSFileBase(object):
         with self.open('rb') as fh:
             data = fh.read()
             return data
+
+    def format_filetype(self):
+        filetype = self.filetype()
+        if filetype == self.TYPE_DIRECTORY or self.isdir():
+            return "Directory"
+        if filetype == self.TYPE_LOADEXEC:
+            return "Untyped"
+
+        if filetype >= self.TYPE_IMAGE:
+            return "Image file (&{:03X})".format(filetype)
+
+        return "&{:03X}".format(filetype)
+
+    def format_size(self):
+        size = self.size()
+        if size == -1 or size is None:
+            return "Unknown"
+        return "{} bytes".format(size)
+
+    def format_timestamp(self):
+        epochtime = self.epochtime()
+        if epochtime is None:
+            return "Unknown"
+        dt = datetime.datetime.utcfromtimestamp(epochtime)
+        return dt.strftime('%H:%M:%S.X %d %b %Y').replace('X', '{:02}'.format(dt.microsecond / 10000))
 
 
 class FSDirectoryBase(object):
