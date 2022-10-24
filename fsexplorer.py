@@ -484,6 +484,7 @@ class FSExplorerFrame(wx.Frame):
         self.Layout()
 
         if self.explorers:
+            self.explorers.window_has_closed(self.dirname)
             self.explorers.window_has_opened(self.dirname, self)
 
     def RefreshDirectory(self):
@@ -622,7 +623,8 @@ class FSExplorers(object):
 
     def window_has_closed(self, dirname):
         filenamekey = self.fsfile_key(dirname)
-        del self.open_windows[filenamekey]
+        if filenamekey in self.open_windows:
+            del self.open_windows[filenamekey]
 
     def window_has_opened(self, dirname, window):
         filenamekey = self.fsfile_key(dirname)
@@ -634,7 +636,8 @@ class FSExplorers(object):
 
     def fileinfo_has_closed(self, filename):
         filenamekey = self.fsfile_key(filename)
-        del self.open_fileinfos[filenamekey]
+        if filenamekey in self.open_fileinfos:
+            del self.open_fileinfos[filenamekey]
 
     def fileinfo_has_opened(self, filename, window):
         filenamekey = self.fsfile_key(filename)
