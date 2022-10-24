@@ -216,6 +216,7 @@ class FSFileIcon(wx.Panel):
 
             elif button == 'MENU':
                 if not self.selected:
+                    self.frame.DeselectAll()
                     self.select()
                 self.frame.on_file_menu(self.fsfile)
 
