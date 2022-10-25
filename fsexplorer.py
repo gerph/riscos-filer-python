@@ -158,7 +158,8 @@ class FSFileIcon(wx.Panel):
             self.Refresh()
 
     def on_click(self, event):
-        # Ensure that we get focus when we do this.
+        # Ensure that we get focus when we do this (and raise as otherwise we don't get keys)
+        self.frame.Raise()
         self.frame.SetFocus()
 
         button = self.frame.click_event_to_button(event)
@@ -526,7 +527,8 @@ class FSExplorerFrame(wx.Frame):
         return button
 
     def on_click(self, event):
-        # Ensure that we get focus when we do this.
+        # Ensure that we get focus when we do this (and raise as otherwise we don't get keys)
+        self.Raise()
         self.SetFocus()
 
         button = self.click_event_to_button(event)
@@ -723,12 +725,18 @@ class FSExplorerFrame(wx.Frame):
 
         self.PopupMenu(self.menu)
 
-    def GetNextFramePos(self):
+    def GetNextFramePos(self, counter=0):
         """
         Return a position on the screen for the next window to open at.
         """
+        # We would like frames to appear in different positions when they're opened
+        # as part of a sequence.
+        counterx = (counter % 8) + ((counter / 8) % 6)
+        countery = (counter % 8) + (((counter / 8) % 6) / 2)
+
         pos = self.GetPosition()
-        pos = (pos.x + self.open_offset_x, pos.y + self.open_offset_y)
+        pos = (pos.x + int(self.open_offset_x * (counterx + 1)),
+               pos.y + int(self.open_offset_y * (counterx + 1)))
         return pos
 
     def OnFileActivate(self, fsfile, close=False, shift=None):
@@ -767,12 +775,17 @@ class FSExplorerFrame(wx.Frame):
         self.explorers.open_window(target, pos, self.display_format)
 
     def OnSelectionInfo(self):
-        self.ApplySelectedFiles(self.OnFileInfo)
+        def open_each(fsfile):
+            self.OnFileInfo(fsfile, counter=open_each.counter)
+            open_each.counter += 1
+        open_each.counter = 0
 
-    def OnFileInfo(self, fsfile):
+        self.ApplySelectedFiles(open_each)
+
+    def OnFileInfo(self, fsfile, counter=0):
         if self.debug:
             print("Info: %r" % (fsfile,))
-        pos = self.GetNextFramePos()
+        pos = self.GetNextFramePos(counter)
         if self.explorers:
             self.explorers.open_fileinfo(fsfile.filename, pos=pos)
         else:
