@@ -15,6 +15,10 @@ class FSFileNotFoundError(FSError):
     pass
 
 
+class FSReadFailedError(FSError):
+    pass
+
+
 class FSNotADirectoryError(FSError):
     pass
 
