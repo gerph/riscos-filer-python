@@ -565,7 +565,7 @@ class FSExplorerFrame(wx.Frame):
         """
         Add menu items related to making a selection.
         """
-        self.add_menuitem(menu, 'Select all', lambda event: self.SelectAll())
+        self.add_menuitem(menu, 'Select all\tctrl-A', lambda event: self.SelectAll())
         self.add_menuitem(menu, 'Clear selection', lambda event: self.DeselectAll())
 
     def add_menu_file_selection(self, menu):
@@ -575,10 +575,12 @@ class FSExplorerFrame(wx.Frame):
         self.add_menuitem(menu, 'Info...', lambda event: self.OnSelectionInfo())
 
     def add_menu_dirop(self, menu):
-        self.add_menuitem(menu, 'Refresh directory', lambda event: self.RefreshDirectory())
+        self.add_menuitem(menu, 'Refresh directory\tctrl-R', lambda event: self.RefreshDirectory())
 
     def on_key(self, event, down):
         keycode = event.GetKeyCode()
+        if self.debug:
+            print("Key: code = %r, down = %r" % (keycode, down))
         if keycode == wx.WXK_SHIFT:
             if self.debug:
                 print("Key: Shift: %r" % (down,))
@@ -594,6 +596,17 @@ class FSExplorerFrame(wx.Frame):
         Handle any extra key codes - don't have any yet.
         """
         keycode = event.GetKeyCode()
+        if self.debug:
+            print("KeyChar: code = %r" % (keycode,))
+
+        if keycode == ord('A') and self.control_down:
+            # ctrl-A
+            self.SelectAll()
+
+        elif keycode == ord('R') and self.control_down:
+            # ctrl-R
+            wx.CallAfter(self.RefreshDirectory)
+
         event.Skip()
 
     def GetTitleText(self):
@@ -732,11 +745,11 @@ class FSExplorerFrame(wx.Frame):
         # We would like frames to appear in different positions when they're opened
         # as part of a sequence.
         counterx = (counter % 8) + ((counter / 8) % 6)
-        countery = (counter % 8) + (((counter / 8) % 6) / 2)
+        countery = (counter % 8) + (((counter / 8) % 6) / 2.0)
 
         pos = self.GetPosition()
         pos = (pos.x + int(self.open_offset_x * (counterx + 1)),
-               pos.y + int(self.open_offset_y * (counterx + 1)))
+               pos.y + int(self.open_offset_y * (countery + 1)))
         return pos
 
     def OnFileActivate(self, fsfile, close=False, shift=None):
