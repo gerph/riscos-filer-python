@@ -158,67 +158,36 @@ class FSFileIcon(wx.Panel):
             self.Refresh()
 
     def on_click(self, event):
-        double = event.LeftDClick() or event.RightDClick()
-        if self.frame.debug:
-            print("Click: %r, Double: %r" % (self.fsfile, double))
-
         # Ensure that we get focus when we do this.
         self.frame.SetFocus()
 
-        button = 'NONE'
-        if double:
-            if event.LeftDClick():
-                button = 'SELECT'
-            elif event.RightDClick():
-                button = 'ADJUST'
-        else:
-            if event.LeftDown():
-                button = 'SELECT'
-            elif event.RightDown():
-                button = 'ADJUST'
-            elif event.MiddleDown():
-                button = 'MENU'
-
-        # Now let's transform these if we're use the non-RISC OS mouse model
-        if not self.frame.mouse_model_riscos:
-            # The non-RISC OS mouse model is:
-            #   ctrl+left toggles items
-            #   right opens menu
-            if button == 'ADJUST':
-                # Right button means Menu
-                button = 'MENU'
-
-            elif button == 'SELECT' and self.frame.control_down:
-                # If they had control down, we change this to the Adjust button (1)
-                button = 'ADJUST'
+        button = self.frame.click_event_to_button(event)
 
         if self.frame.debug:
-            print("Mouse: double=%r button=%r" % (double, button))
+            print("File Click: Button=%r" % (button,))
 
-        if double:
-            # Double click
-            if button == 'SELECT':
-                # Run object
-                # (deselect item first)
-                self.select(False)
-                self.frame.OnFileActivate(self.fsfile, close=False)
+        if button == 'D-SELECT':
+            # Run object
+            # (deselect item first)
+            self.select(False)
+            self.frame.OnFileActivate(self.fsfile, close=False)
 
-            elif button == 'ADJUST':
-                # Run object and close window
-                self.frame.OnFileActivate(self.fsfile, close=True)
-        else:
-            if button == 'SELECT':
+        elif button == 'D-ADJUST':
+            # Run object and close window
+            self.frame.OnFileActivate(self.fsfile, close=True)
+
+        elif button == 'SELECT':
+            self.frame.DeselectAll()
+            self.select()
+
+        elif button == 'ADJUST':
+            self.select()
+
+        elif button == 'MENU':
+            if not self.selected:
                 self.frame.DeselectAll()
                 self.select()
-
-            elif button == 'ADJUST':
-                self.select()
-
-            elif button == 'MENU':
-                if not self.selected:
-                    self.frame.DeselectAll()
-                    self.select()
-                self.frame.on_file_menu(self.fsfile)
+            self.frame.on_file_menu(self.fsfile)
 
 
 class LeftAlignedIcons(object):
@@ -500,13 +469,6 @@ class FSExplorerFrame(wx.Frame):
 
         self.create_panel()
 
-        # We track keys so that the right events can be delivered for running
-        # or opening files with control keys pressed.
-        self.panel.Bind(wx.EVT_KEY_DOWN, lambda event: self.on_key(event, down=True))
-        self.panel.Bind(wx.EVT_KEY_UP, lambda event: self.on_key(event, down=False))
-        # We want regular characters for the cases where we're controlling by
-        # the keyboard.
-        self.panel.Bind(wx.EVT_CHAR, self.on_key_char)
         self.Bind(wx.EVT_CLOSE, self.on_close)
 
         # Build up the menu we'll use
@@ -517,9 +479,73 @@ class FSExplorerFrame(wx.Frame):
 
         self.menu = wx.Menu()
         self.menu.Append(-1, 'Display', self.display_menu)
-        self.menu.Append(-1, 'Selection', self.selection_menu)
+        self.selection_menu_item = self.menu.Append(-1, 'Selection', self.selection_menu)
         self.add_menu_selection(self.menu)
         self.add_menu_dirop(self.menu)
+
+    def click_event_to_button(self, event):
+        """
+        Convert from a click event to an action that we can perform.
+
+        @param event:   The event to process
+
+        @return: button name, in RISC OS terms, preceeded by 'D-' for double click
+        """
+        double = event.LeftDClick() or event.RightDClick()
+        button = 'NONE'
+        if double:
+            if event.LeftDClick():
+                button = 'SELECT'
+            elif event.RightDClick():
+                button = 'ADJUST'
+        else:
+            if event.LeftDown():
+                button = 'SELECT'
+            elif event.RightDown():
+                button = 'ADJUST'
+            elif event.MiddleDown():
+                button = 'MENU'
+
+        # Now let's transform these if we're use the non-RISC OS mouse model
+        if not self.mouse_model_riscos:
+            # The non-RISC OS mouse model is:
+            #   ctrl+left toggles items
+            #   right opens menu
+            if button == 'ADJUST':
+                # Right button means Menu
+                button = 'MENU'
+
+            elif button == 'SELECT' and self.control_down:
+                # If they had control down, we change this to the Adjust button (1)
+                button = 'ADJUST'
+
+        if button != 'NONE':
+            if double:
+                button = 'D-' + button
+
+        return button
+
+    def on_click(self, event):
+        # Ensure that we get focus when we do this.
+        self.SetFocus()
+
+        button = self.click_event_to_button(event)
+
+        if self.debug:
+            print("Window Click: Button%r" % (button,))
+
+        if button in ('D-SELECT', 'D-ADJUST', 'SELECT'):
+            # A plain click on the background should deselect everything,
+            # but not if adjust is pressed. Adjust is 'amend the selection'
+            # so amending on nothing should leave things alone.
+            self.DeselectAll()
+
+        elif button == 'ADJUST':
+            # Do nothing
+            pass
+
+        elif button == 'MENU':
+            self.on_file_menu(None)
 
     def add_menuitem(self, menu, name, func):
         menuitem = menu.Append(-1, name, kind=wx.ITEM_NORMAL)
@@ -544,7 +570,6 @@ class FSExplorerFrame(wx.Frame):
         """
         Add menu items related to a file selection
         """
-        # FIXME: Make this able to grey items if they are inappropriate
         self.add_menuitem(menu, 'Info...', lambda event: self.OnSelectionInfo())
 
     def add_menu_dirop(self, menu):
@@ -614,6 +639,19 @@ class FSExplorerFrame(wx.Frame):
         for leafname in last_selection:
             self.SelectFile(leafname)
 
+        # We track keys so that the right events can be delivered for running
+        # or opening files with control keys pressed.
+        self.panel.Bind(wx.EVT_KEY_DOWN, lambda event: self.on_key(event, down=True))
+        self.panel.Bind(wx.EVT_KEY_UP, lambda event: self.on_key(event, down=False))
+        # We want regular characters for the cases where we're controlling by
+        # the keyboard.
+        self.panel.Bind(wx.EVT_CHAR, self.on_key_char)
+        self.panel.Bind(wx.EVT_LEFT_DOWN, self.on_click)
+        self.panel.Bind(wx.EVT_LEFT_DCLICK, self.on_click)
+        self.panel.Bind(wx.EVT_RIGHT_DOWN, self.on_click)
+        self.panel.Bind(wx.EVT_RIGHT_DCLICK, self.on_click)
+        self.panel.Bind(wx.EVT_MIDDLE_DOWN, self.on_click)
+
         if self.explorers:
             self.explorers.window_has_closed(self.dirname)
             self.explorers.window_has_opened(self.dirname, self)
@@ -662,9 +700,27 @@ class FSExplorerFrame(wx.Frame):
             if fsicon.selected:
                 func(fsicon.fsfile)
 
+    def GetSelectedFileIcons(self):
+        selection = [fsicon for fsicon in self.panel.icons.values() if fsicon.selected]
+        return selection
+
     def on_file_menu(self, fsfile):
         if self.debug:
             print("Menu: %r" % (fsfile,))
+
+        # Prepare the menu to display files
+        selection = self.GetSelectedFileIcons()
+        if len(selection) == 0:
+            # No files selected, so we need to grey out the selection menu
+            self.selection_menu_item.Enable(False)
+            self.selection_menu_item.SetItemLabel("Selection")
+        else:
+            self.selection_menu_item.Enable(True)
+            if len(selection) == 1:
+                self.selection_menu_item.SetItemLabel("File '{}'".format(selection[0].fsfile.leafname))
+            else:
+                self.selection_menu_item.SetItemLabel("Selection")
+
         self.PopupMenu(self.menu)
 
     def GetNextFramePos(self):
