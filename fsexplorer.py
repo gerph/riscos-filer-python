@@ -474,6 +474,9 @@ class FSExplorerFrame(wx.Frame):
 
         # Build up the menu we'll use
         self.menu_display = wx.Menu()
+        self.menuitem_display_large = None
+        self.menuitem_display_small = None
+        self.menuitem_display_fullinfo = None
         self.add_menu_display(self.menu_display)
         self.menu_selection = wx.Menu()
         self.add_menu_file_selection(self.menu_selection)
@@ -551,8 +554,8 @@ class FSExplorerFrame(wx.Frame):
         elif button == 'MENU':
             self.on_file_menu(None)
 
-    def add_menuitem(self, menu, name, func):
-        menuitem = menu.Append(-1, name, kind=wx.ITEM_NORMAL)
+    def add_menuitem(self, menu, name, func,kind=wx.ITEM_NORMAL):
+        menuitem = menu.Append(-1, name, kind=kind)
         self.Bind(wx.EVT_MENU, func, menuitem)
         return menuitem
 
@@ -560,9 +563,9 @@ class FSExplorerFrame(wx.Frame):
         """
         Add menu items for the 'Display' submenu.
         """
-        self.add_menuitem(menu, 'Large icons', lambda event: self.SetDisplayFormat('large'))
-        self.add_menuitem(menu, 'Small icons', lambda event: self.SetDisplayFormat('small'))
-        self.add_menuitem(menu, 'Full info', lambda event: self.SetDisplayFormat('fullinfo'))
+        self.menuitem_display_large = self.add_menuitem(menu, 'Large icons', kind=wx.ITEM_CHECK, func=lambda event: self.SetDisplayFormat('large'))
+        self.menuitem_display_small = self.add_menuitem(menu, 'Small icons', kind=wx.ITEM_CHECK, func=lambda event: self.SetDisplayFormat('small'))
+        self.menuitem_display_fullinfo = self.add_menuitem(menu, 'Full info', kind=wx.ITEM_CHECK, func=lambda event: self.SetDisplayFormat('fullinfo'))
 
     def add_menu_selection(self, menu):
         """
@@ -741,6 +744,11 @@ class FSExplorerFrame(wx.Frame):
             else:
                 self.menuitem_selection.SetItemLabel("File ''")
             self.menuitem_clearselection.Enable(True)
+
+        # Display submenu ticking
+        self.menuitem_display_large.Check(self.display_format == 'large')
+        self.menuitem_display_small.Check(self.display_format == 'small')
+        self.menuitem_display_fullinfo.Check(self.display_format == 'fullinfo')
 
         # Only show the parent if there is one
         self.menuitem_openparent.Enable(bool(self.MenuHasOpenParent()))
