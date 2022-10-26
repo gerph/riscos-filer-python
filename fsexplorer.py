@@ -473,17 +473,17 @@ class FSExplorerFrame(wx.Frame):
         self.Bind(wx.EVT_CLOSE, self.on_close)
 
         # Build up the menu we'll use
-        self.display_menu = wx.Menu()
-        self.add_menu_display(self.display_menu)
-        self.selection_menu = wx.Menu()
-        self.add_menu_file_selection(self.selection_menu)
+        self.menu_display = wx.Menu()
+        self.add_menu_display(self.menu_display)
+        self.menu_selection = wx.Menu()
+        self.add_menu_file_selection(self.menu_selection)
 
         self.menu = wx.Menu()
-        self.menu.Append(-1, 'Display', self.display_menu)
-        self.selection_menu_item = self.menu.Append(-1, 'Selection', self.selection_menu)
-        self.clearselection_menu_item = None
+        self.menu.Append(-1, 'Display', self.menu_display)
+        self.menuitem_selection = self.menu.Append(-1, 'Selection', self.menu_selection)
+        self.menuitem_clearselection = None
         self.add_menu_selection(self.menu)
-        self.openparent_menu_item = None
+        self.menuitem_openparent = None
         self.add_menu_dirop(self.menu)
 
     def click_event_to_button(self, event):
@@ -569,7 +569,7 @@ class FSExplorerFrame(wx.Frame):
         Add menu items related to making a selection.
         """
         self.add_menuitem(menu, 'Select all\tctrl-A', lambda event: self.SelectAll())
-        self.clearselection_menu_item = self.add_menuitem(menu, 'Clear selection', lambda event: self.DeselectAll())
+        self.menuitem_clearselection = self.add_menuitem(menu, 'Clear selection', lambda event: self.DeselectAll())
 
     def add_menu_file_selection(self, menu):
         """
@@ -578,7 +578,7 @@ class FSExplorerFrame(wx.Frame):
         self.add_menuitem(menu, 'Info...', lambda event: self.OnSelectionInfo())
 
     def add_menu_dirop(self, menu):
-        self.openparent_menu_item = self.add_menuitem(menu, 'Open parent', lambda event: self.OpenParentDirectory())
+        self.menuitem_openparent = self.add_menuitem(menu, 'Open parent', lambda event: self.OpenParentDirectory())
         self.add_menuitem(menu, 'Refresh directory\tctrl-R', lambda event: self.RefreshDirectory())
 
     def on_key(self, event, down):
@@ -731,19 +731,19 @@ class FSExplorerFrame(wx.Frame):
         selection = self.GetSelectedFileIcons()
         if len(selection) == 0:
             # No files selected, so we need to grey out the selection menu
-            self.selection_menu_item.Enable(False)
-            self.selection_menu_item.SetItemLabel("Selection")
-            self.clearselection_menu_item.Enable(False)
+            self.menuitem_selection.Enable(False)
+            self.menuitem_selection.SetItemLabel("Selection")
+            self.menuitem_clearselection.Enable(False)
         else:
-            self.selection_menu_item.Enable(True)
+            self.menuitem_selection.Enable(True)
             if len(selection) == 1:
-                self.selection_menu_item.SetItemLabel("File '{}'".format(selection[0].fsfile.leafname))
+                self.menuitem_selection.SetItemLabel("File '{}'".format(selection[0].fsfile.leafname))
             else:
-                self.selection_menu_item.SetItemLabel("File ''")
-            self.clearselection_menu_item.Enable(True)
+                self.menuitem_selection.SetItemLabel("File ''")
+            self.menuitem_clearselection.Enable(True)
 
         # Only show the parent if there is one
-        self.openparent_menu_item.Enable(bool(self.MenuHasOpenParent()))
+        self.menuitem_openparent.Enable(bool(self.MenuHasOpenParent()))
 
         self.PopupMenu(self.menu)
 
