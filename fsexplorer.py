@@ -445,6 +445,7 @@ class FSExplorerFrame(wx.Frame):
     default_height = 480
     mouse_model_riscos = False
     default_display_format = 'large'
+    default_sort_format = 'name'
 
     def __init__(self, fs, dirname, *args, **kwargs):
         self.fs = fs
@@ -452,6 +453,7 @@ class FSExplorerFrame(wx.Frame):
         self.fsdir = self.fs.dir(dirname)
         self.explorers = kwargs.pop('explorers', None)
         self.display_format = kwargs.pop('display_format', self.default_display_format)
+        self.sort_format = kwargs.pop('sort_format', self.default_sort_format)
         self.panel = None
         self._title_text = None
         self._title_widget = None
@@ -477,6 +479,10 @@ class FSExplorerFrame(wx.Frame):
         self.menuitem_display_large = None
         self.menuitem_display_small = None
         self.menuitem_display_fullinfo = None
+        self.menuitem_display_sortname = None
+        self.menuitem_display_sortsize = None
+        self.menuitem_display_sortfiletype = None
+        self.menuitem_display_sorttimetamp = None
         self.add_menu_display(self.menu_display)
         self.menu_selection = wx.Menu()
         self.add_menu_file_selection(self.menu_selection)
@@ -567,6 +573,13 @@ class FSExplorerFrame(wx.Frame):
         self.menuitem_display_small = self.add_menuitem(menu, 'Small icons', kind=wx.ITEM_CHECK, func=lambda event: self.SetDisplayFormat('small'))
         self.menuitem_display_fullinfo = self.add_menuitem(menu, 'Full info', kind=wx.ITEM_CHECK, func=lambda event: self.SetDisplayFormat('fullinfo'))
 
+        menu.AppendSeparator()
+
+        self.menuitem_display_sortname = self.add_menuitem(menu, 'Sort by name', kind=wx.ITEM_CHECK, func=lambda event: self.SetSortFormat('name'))
+        self.menuitem_display_sortsize = self.add_menuitem(menu, 'Sort by size', kind=wx.ITEM_CHECK, func=lambda event: self.SetSortFormat('size'))
+        self.menuitem_display_sortfiletype = self.add_menuitem(menu, 'Sort by file type', kind=wx.ITEM_CHECK, func=lambda event: self.SetSortFormat('filetype'))
+        self.menuitem_display_sorttimetamp = self.add_menuitem(menu, 'Sort by date/time', kind=wx.ITEM_CHECK, func=lambda event: self.SetSortFormat('timestamp'))
+
     def add_menu_selection(self, menu):
         """
         Add menu items related to making a selection.
@@ -639,6 +652,34 @@ class FSExplorerFrame(wx.Frame):
         text = self.GetFrameTitleText()
         self.SetTitle(text)
 
+    def GetSortedFiles(self, sort_format=None):
+        """
+        Return all the files in the directory, using the current or requested sort.
+        """
+
+        if sort_format is None:
+            sort_format = self.sort_format
+
+        # FIXME: Invalid sort returns empty list to be clearly wrong. Maybe default to 'name'?
+        files = []
+        key_func = lambda f: f.leafname
+
+        if sort_format == 'name':
+            key_func = lambda f: self.fs.normalise_name(f.leafname)
+
+        elif sort_format == 'size':
+            key_func = lambda f: 0 if f.isdir() else f.size()
+
+        elif sort_format == 'filetype':
+            key_func = lambda f: -2 if f.isdir() else f.filetype()
+
+        elif sort_format == 'timestamp':
+            key_func = lambda f: f.epochtime()
+
+        files = sorted(self.fsdir.files, key=key_func)
+
+        return files
+
     def create_panel(self, keep_selection=True):
         last_selection = set()
         if self.panel:
@@ -651,7 +692,7 @@ class FSExplorerFrame(wx.Frame):
             self.panel.Destroy()
             self.panel = None
 
-        self.files = sorted(self.fsdir.files, key=lambda f: f.leafname.lower())
+        self.files = self.GetSortedFiles()
 
         # Make a title area and sizer for the upper part of the panel
         self.panel = FSExplorerPanel(self, display_format=self.display_format)
@@ -705,6 +746,12 @@ class FSExplorerFrame(wx.Frame):
         # The title text might be affected by the display format
         self.UpdateFrameTitleText()
 
+    def SetSortFormat(self, sort_format):
+        self.sort_format = sort_format
+        self.create_panel()
+        # The title text might be affected by the display format
+        self.UpdateFrameTitleText()
+
     def SelectFile(self, leafname, state=True):
         fsicon = self.panel.icons.get(leafname, None)
         if fsicon:
@@ -749,6 +796,10 @@ class FSExplorerFrame(wx.Frame):
         self.menuitem_display_large.Check(self.display_format == 'large')
         self.menuitem_display_small.Check(self.display_format == 'small')
         self.menuitem_display_fullinfo.Check(self.display_format == 'fullinfo')
+        self.menuitem_display_sortname.Check(self.sort_format == 'name')
+        self.menuitem_display_sortsize.Check(self.sort_format == 'size')
+        self.menuitem_display_sortfiletype.Check(self.sort_format == 'filetype')
+        self.menuitem_display_sorttimetamp.Check(self.sort_format == 'timestamp')
 
         # Only show the parent if there is one
         self.menuitem_openparent.Enable(bool(self.MenuHasOpenParent()))
