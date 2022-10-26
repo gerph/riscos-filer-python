@@ -855,7 +855,9 @@ class FSExplorerFrame(wx.Frame):
     def OpenExplorer(self, target, pos=None):
         if not pos:
             pos = self.GetNextFramePos()
-        self.explorers.open_window(target, pos, self.display_format)
+        self.explorers.open_window(target, pos,
+                                   display_format=self.display_format,
+                                   sort_format=self.sort_format)
 
     def MenuHasOpenParent(self):
         target = self.fs.dirname(self.dirname)
@@ -946,7 +948,7 @@ class FSExplorers(object):
         filenamekey = self.fsfile_key(dirname)
         return self.open_windows.get(filenamekey, None)
 
-    def open_window(self, dirname, pos=None, display_format=None):
+    def open_window(self, dirname, pos=None, display_format=None, sort_format=None):
         win = self.find_window(dirname)
         if win:
             win.Raise()
@@ -955,7 +957,8 @@ class FSExplorers(object):
                                           explorers=self,
                                           pos=pos,
                                           size=(self.default_width, self.default_height),
-                                          display_format=display_format)
+                                          display_format=display_format,
+                                          sort_format=sort_format)
             win.Show(True)
 
         return win
