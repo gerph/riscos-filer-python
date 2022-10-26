@@ -487,6 +487,7 @@ class FSExplorerFrame(wx.Frame):
         self.menuitem_display_sorttimestamp = None
         self.add_menu_display(self.menu_display)
         self.menu_selection = wx.Menu()
+        self.menuitem_file_delete = None
         self.add_menu_file_selection(self.menu_selection)
 
         self.menu = wx.Menu()
@@ -594,6 +595,7 @@ class FSExplorerFrame(wx.Frame):
         Add menu items related to a file selection
         """
         self.add_menuitem(menu, 'Info', lambda event: self.OnSelectionInfo())
+        self.menuitem_file_delete = self.add_menuitem(menu, 'Delete', lambda event: self.OnSelectionDelete())
 
     def add_menu_dirop(self, menu):
         self.menuitem_openparent = self.add_menuitem(menu, 'Open parent', lambda event: self.OpenParentDirectory())
@@ -746,7 +748,7 @@ class FSExplorerFrame(wx.Frame):
 
     def ReportError(self, title, message):
         """
-        Report an error from the UI system.
+        Report an error from the FSExplorer.
         """
         error_frame = wx.MessageDialog(None,
                                        message,
@@ -754,6 +756,21 @@ class FSExplorerFrame(wx.Frame):
                                        style=wx.OK | wx.ICON_ERROR | wx.CENTRE,
                                        pos=wx.DefaultPosition)
         error_frame.ShowModal()
+
+    def Confirm(self, title, message, cancel_default=False):
+        """
+        Offer the user an OK/Cancel box to make a choice from.
+        """
+        style = wx.OK | wx.Cancel | wx.ICON_QUESTION | wx.CENTRE
+        if cancel_default:
+            style |= wx.CANCEL_DEFAULT
+        error_frame = wx.MessageDialog(None,
+                                       message,
+                                       caption=title,
+                                       style=style,
+                                       pos=wx.DefaultPosition)
+        response = error_frame.ShowModal()
+        return (response == wx.ID_OK)
 
     def ShowCreateDirectory(self):
         leafname = wx.GetTextFromUser("New directory name:",
@@ -846,6 +863,22 @@ class FSExplorerFrame(wx.Frame):
         # New directory can only work if we can create a directory
         if self.menuitem_newdir:
             self.menuitem_newdir.Enable(self.fsdir.can_mkdir())
+
+        # Can we delete ?
+        can_delete = False
+        if len(selection) == 0:
+            can_delete = False
+        else:
+            # We need to check all the files to see whether any are deletable.
+            if not self.fs.can_delete(None):
+                # Check the filesystem first - if it says no, there's no point in going further
+                can_delete = False
+            else:
+                for fsicon in selection:
+                    if fsicon.fsfile.can_delete():
+                        can_delete = True
+                        break
+        self.menuitem_file_delete.Enable(can_delete)
 
         # Only show the parent if there is one
         self.menuitem_openparent.Enable(bool(self.MenuHasOpenParent()))
