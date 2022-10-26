@@ -446,6 +446,8 @@ class FSExplorerFrame(wx.Frame):
     mouse_model_riscos = False
     default_display_format = 'large'
     default_sort_format = 'name'
+    support_mkdir = True
+    support_refresh = True
 
     def __init__(self, fs, dirname, *args, **kwargs):
         self.fs = fs
@@ -595,8 +597,12 @@ class FSExplorerFrame(wx.Frame):
 
     def add_menu_dirop(self, menu):
         self.menuitem_openparent = self.add_menuitem(menu, 'Open parent', lambda event: self.OpenParentDirectory())
-        self.menuitem_newdir = self.add_menuitem(menu, 'New directory...', lambda event: self.ShowCreateDirectory())
-        self.add_menuitem(menu, 'Refresh directory\tctrl-R', lambda event: self.RefreshDirectory())
+        if self.support_mkdir:
+            self.menuitem_newdir = self.add_menuitem(menu, 'New directory...\tctrl-N', lambda event: self.ShowCreateDirectory())
+        else:
+            self.menuitem_newdir = None
+        if self.support_refresh:
+            self.add_menuitem(menu, 'Refresh directory\tctrl-R', lambda event: self.RefreshDirectory())
 
     def on_key(self, event, down):
         keycode = event.GetKeyCode()
@@ -626,7 +632,14 @@ class FSExplorerFrame(wx.Frame):
 
         elif keycode == ord('R') and self.control_down:
             # ctrl-R
-            wx.CallAfter(self.RefreshDirectory)
+            if self.support_refresh:
+                wx.CallAfter(self.RefreshDirectory)
+
+        elif keycode == ord('N') and self.control_down:
+            # ctrl-N
+            if self.support_mkdir:
+                if self.fsdir.can_mkdir():
+                    self.ShowCreateDirectory()
 
         event.Skip()
 
@@ -731,6 +744,17 @@ class FSExplorerFrame(wx.Frame):
         # This event is informational, so we pass on.
         event.Skip()
 
+    def ReportError(self, title, message):
+        """
+        Report an error from the UI system.
+        """
+        error_frame = wx.MessageDialog(None,
+                                       message,
+                                       caption=title,
+                                       style=wx.OK | wx.ICON_ERROR | wx.CENTRE,
+                                       pos=wx.DefaultPosition)
+        error_frame.ShowModal()
+
     def ShowCreateDirectory(self):
         leafname = wx.GetTextFromUser("New directory name:",
                                       caption="Create new directory",
@@ -741,8 +765,12 @@ class FSExplorerFrame(wx.Frame):
             # If they didn't give anything, just ignore as if they cancelled it.
             return
 
-        self.fsdir.mkdir(leafname)
-        self.RefreshDirectory()
+        try:
+            self.fsdir.mkdir(leafname)
+            self.RefreshDirectory()
+        except Exception as exc:
+            self.ReportError(title="Failed to create directory",
+                             message=str(exc))
 
     def ChangeDirectory(self, dirname):
         if self.panel:
@@ -816,7 +844,8 @@ class FSExplorerFrame(wx.Frame):
         self.menuitem_display_sorttimestamp.Check(self.sort_format == 'timestamp')
 
         # New directory can only work if we can create a directory
-        self.menuitem_newdir.Enable(self.fsdir.can_mkdir())
+        if self.menuitem_newdir:
+            self.menuitem_newdir.Enable(self.fsdir.can_mkdir())
 
         # Only show the parent if there is one
         self.menuitem_openparent.Enable(bool(self.MenuHasOpenParent()))
