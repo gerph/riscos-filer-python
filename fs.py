@@ -23,10 +23,15 @@ class FSNotADirectoryError(FSError):
     pass
 
 
+class FSWriteFailedError(FSError):
+    pass
+
+
 class FSBase(object):
 
     dirsep = '/'
     do_caching = True
+    supports_mkdir = False
 
     def __init__(self):
         self.cached_dirs = {}
@@ -126,18 +131,48 @@ class FSBase(object):
     def split(self, filename):
         return [part for part in filename.split(self.dirsep) if part]
 
-    def dirname(self, filename):
+    def dirandleafname(self, filename):
         parts = self.split(filename)
         if len(parts) > 1:
-            return self.join(*parts[:-1])
+            dirname = self.join(*parts[:-1])
+            leafname = parts[-1]
+        elif len(parts) == 1:
+            dirname = ''
+            leafname = parts[0]
         else:
-            return self.rootname()
+            dirname = self.rootname()
+            leafname = ''
+        return (dirname, leafname)
+
+    def dirname(self, filename):
+        return self.dirandleafname(filename)[0]
 
     def leafname(self, filename):
-        parts = self.split(filename)
-        if len(parts) == 0:
-            return ''
-        return parts[-1]
+        return self.dirandleafname(filename)[1]
+
+    def can_mkdir(self, dirname=None):
+        """
+        Check whether we can create a directory in a given directory.
+
+        @param dirname: Directory name to check, or None to check FS capability.
+        """
+        if dirname is None:
+            return self.supports_mkdir
+        fsdir = self.dir(dirname)
+        return fsdir.can_mkdir()
+
+    def mkdir(self, dirname):
+        """
+        Create a directory with a given name.
+
+        @param dirname: Directory to create.
+        """
+        if not supports_mkdir:
+            raise FSWriteFailedError("{}.mkdir() is not supported".format(self.__class__.__name__))
+
+        fsdir = self.dir(dirname)
+        leafname = self.leafname(dirname)
+        return fsdir.mkdir(leafname)
 
 
 @functools.total_ordering
@@ -325,3 +360,41 @@ class FSDirectoryBase(object):
         self.populate_files()
 
         return sorted(self._files.values())
+
+    def is_writeable(self):
+        """
+        Overloadable: Check whether we can write to this directory.
+
+        @return: True if the files in this folder are modifyable, False if we not.
+        """
+        return False
+
+    def can_mkdir(self):
+        """
+        Overloadable: Check whether we can create a directory in a given directory.
+
+        @return: True if directories can be created here, False if we cannot.
+        """
+        # Check the FS itself first
+        if not self.fs.can_mkdir():
+            return False
+        return self.is_writeable()
+
+    def mkdir(self, lefaname):
+        """
+        Create a directory with a given name.
+
+        @param leafname: leafname of the directory to create.
+        """
+        if not self.is_writeable():
+            raise FSWriteFailedError("Directory '{}' is not writeable".format(self.dirname))
+
+        self.do_mkdir(self, leafname)
+
+    def do_mkdir(self, leafname):
+        """
+        Overloadable: Create a directory with a given name.
+
+        @param leafname: leafname of the directory to create.
+        """
+        raise FSWriteFailedError("Cannot create '{}' in '{}'".format(leafname, self.dirname))

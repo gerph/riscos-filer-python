@@ -482,7 +482,7 @@ class FSExplorerFrame(wx.Frame):
         self.menuitem_display_sortname = None
         self.menuitem_display_sortsize = None
         self.menuitem_display_sortfiletype = None
-        self.menuitem_display_sorttimetamp = None
+        self.menuitem_display_sorttimestamp = None
         self.add_menu_display(self.menu_display)
         self.menu_selection = wx.Menu()
         self.add_menu_file_selection(self.menu_selection)
@@ -578,7 +578,7 @@ class FSExplorerFrame(wx.Frame):
         self.menuitem_display_sortname = self.add_menuitem(menu, 'Sort by name', kind=wx.ITEM_CHECK, func=lambda event: self.SetSortFormat('name'))
         self.menuitem_display_sortsize = self.add_menuitem(menu, 'Sort by size', kind=wx.ITEM_CHECK, func=lambda event: self.SetSortFormat('size'))
         self.menuitem_display_sortfiletype = self.add_menuitem(menu, 'Sort by file type', kind=wx.ITEM_CHECK, func=lambda event: self.SetSortFormat('filetype'))
-        self.menuitem_display_sorttimetamp = self.add_menuitem(menu, 'Sort by date/time', kind=wx.ITEM_CHECK, func=lambda event: self.SetSortFormat('timestamp'))
+        self.menuitem_display_sorttimestamp = self.add_menuitem(menu, 'Sort by date/time', kind=wx.ITEM_CHECK, func=lambda event: self.SetSortFormat('timestamp'))
 
     def add_menu_selection(self, menu):
         """
@@ -591,10 +591,11 @@ class FSExplorerFrame(wx.Frame):
         """
         Add menu items related to a file selection
         """
-        self.add_menuitem(menu, 'Info...', lambda event: self.OnSelectionInfo())
+        self.add_menuitem(menu, 'Info', lambda event: self.OnSelectionInfo())
 
     def add_menu_dirop(self, menu):
         self.menuitem_openparent = self.add_menuitem(menu, 'Open parent', lambda event: self.OpenParentDirectory())
+        self.menuitem_newdir = self.add_menuitem(menu, 'New directory...', lambda event: self.ShowCreateDirectory())
         self.add_menuitem(menu, 'Refresh directory\tctrl-R', lambda event: self.RefreshDirectory())
 
     def on_key(self, event, down):
@@ -730,6 +731,19 @@ class FSExplorerFrame(wx.Frame):
         # This event is informational, so we pass on.
         event.Skip()
 
+    def ShowCreateDirectory(self):
+        leafname = wx.GetTextFromUser("New directory name:",
+                                      caption="Create new directory",
+                                      default_value="Directory",
+                                      parent=self, centre=True)
+
+        if not leafname:
+            # If they didn't give anything, just ignore as if they cancelled it.
+            return
+
+        self.fsdir.mkdir(leafname)
+        self.RefreshDirectory()
+
     def ChangeDirectory(self, dirname):
         if self.panel:
             if self.explorers:
@@ -799,7 +813,10 @@ class FSExplorerFrame(wx.Frame):
         self.menuitem_display_sortname.Check(self.sort_format == 'name')
         self.menuitem_display_sortsize.Check(self.sort_format == 'size')
         self.menuitem_display_sortfiletype.Check(self.sort_format == 'filetype')
-        self.menuitem_display_sorttimetamp.Check(self.sort_format == 'timestamp')
+        self.menuitem_display_sorttimestamp.Check(self.sort_format == 'timestamp')
+
+        # New directory can only work if we can create a directory
+        self.menuitem_newdir.Enable(self.fsdir.can_mkdir())
 
         # Only show the parent if there is one
         self.menuitem_openparent.Enable(bool(self.MenuHasOpenParent()))
