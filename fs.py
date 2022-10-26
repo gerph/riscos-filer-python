@@ -1,3 +1,8 @@
+"""
+Base classes for abstracting access to objects on a file system.
+"""
+
+import datetime
 import functools
 import os
 
@@ -10,12 +15,21 @@ class FSFileNotFoundError(FSError):
     pass
 
 
+class FSReadFailedError(FSError):
+    pass
+
+
+class FSNotADirectoryError(FSError):
+    pass
+
+
 class FSBase(object):
 
     dirsep = '/'
+    do_caching = True
 
     def __init__(self):
-        pass
+        self.cached_dirs = {}
 
     def __repr__(self):
         return "<{}()>".format(self.__class__.__name__)
@@ -30,13 +44,63 @@ class FSBase(object):
         """
         Return the root directory for a given filesystem.
         """
-        raise NotImplementedError("{}.root() is not implemented".format(self.__class__.__name__))
+        return self.dir(self.rootname())
 
     def dir(self, dirname):
         """
-        Return a given directory for a given filesystem.
+        Return a given directory for a given filesystem (through the cache).
+        """
+        cache_key = None
+        if self.do_caching:
+            cache_key = self.normalise_name(dirname)
+            fsdir = self.cached_dirs.get(cache_key, None)
+            if fsdir is not None:
+                return fsdir
+
+        # We recurse upwards, trying to get earlier dirs so that we have all the
+        # directories cached, if we need to. Or we'll report errors if the directory
+        # did not exist.
+        parent = self.dirname(dirname)
+        parent_fsdir = None
+        if dirname != parent:
+            parent_fsdir = self.dir(parent)
+
+        fsdir = self.get_dir(dirname, parent_fsdir)
+        if self.do_caching:
+            self.cached_dirs[cache_key] = fsdir
+        return fsdir
+
+    def get_dir(self, dirname, parent_fsdir=None):
+        """
+        Overloadable: Return a given directory for a given filesystem.
         """
         raise NotImplementedError("{}.dir() is not implemented".format(self.__class__.__name__))
+
+    def invalidate_dir(self, dirname):
+        """
+        Invalidate the cache for a given directory name.
+        """
+        if self.do_caching:
+            cache_key = self.normalise_name(dirname)
+            if cache_key in self.cached_dirs:
+                # We can just call the invalidate function in the cached directory.
+                self.cached_dirs[cache_key].invalidate()
+        # If we aren't caching, we hope that the user is able to invalidate any context
+        # they hold.
+
+    def rootinfo(self):
+        """
+        Return a FSFileInfo for the root.
+        """
+        raise NotImplementedError("{}.rootinfo() is not implemented".format(self.__class__.__name__))
+
+    def fileinfo(self, filename):
+        dirname = self.dirname(filename)
+        leafname = self.leafname(filename)
+        if dirname == self.rootname and leafname == '':
+            return self.rootinfo()
+        fsdir = self.dir(dirname)
+        return fsdir[leafname]
 
     def normalise_name(self, name):
         """
@@ -65,12 +129,14 @@ class FSBase(object):
     def dirname(self, filename):
         parts = self.split(filename)
         if len(parts) > 1:
-            return self.join(parts[:-1])
+            return self.join(*parts[:-1])
         else:
             return self.rootname()
 
     def leafname(self, filename):
         parts = self.split(filename)
+        if len(parts) == 0:
+            return ''
         return parts[-1]
 
 
@@ -78,12 +144,15 @@ class FSBase(object):
 class FSFileBase(object):
     TYPE_DATA = 0xFFD
     TYPE_DIRECTORY = 0x1000
+    TYPE_IMAGE = 0x3000
     TYPE_LOADEXEC = -1
 
-    def __init__(self, fs, filename, parent=None):
+    def __init__(self, fs, filename, size=None, epochtime=None, parent=None):
         self.fs = fs
         self.filename = filename
         self.leafname = self.fs.leafname(self.filename)
+        self._size = size
+        self._epochtime = epochtime
         self._parent = parent
 
     def __repr__(self):
@@ -100,11 +169,41 @@ class FSFileBase(object):
         return self.leafname < other.leafname
 
     def isdir(self):
+        """
+        Is this object a directory?
+        """
         return False
+
+    def dir(self):
+        """
+        Obtain a FSDirectory for this object, if this is directory.
+        """
+        if not self.isdir():
+            raise FSNotADirectoryError("FSFile '{}' is not a directory".format(self.filename))
+        return self.fs.dir(self.filename)
+
+    def parent(self):
+        """
+        Obtain a FSDirectory for the parent directory of this object.
+        """
+        dirname = self.fs.dirname(self.filename)
+        return self.fs.dir(dirname)
 
     def filetype(self):
         # Unknown type always goes to data.
         return self.TYPE_DATA
+
+    def size(self):
+        # Return the size we gave on creation
+        if self._size is None:
+            return -1
+        return self._size
+
+    def epochtime(self):
+        # Return the Unix epoch time we gave on creation
+        if self._epochtime is None:
+            return 0
+        return self._epochtime
 
     def open(self, mode='rb'):
         """
@@ -121,6 +220,31 @@ class FSFileBase(object):
         with self.open('rb') as fh:
             data = fh.read()
             return data
+
+    def format_filetype(self):
+        filetype = self.filetype()
+        if filetype == self.TYPE_DIRECTORY or self.isdir():
+            return "Directory"
+        if filetype == self.TYPE_LOADEXEC:
+            return "Untyped"
+
+        if filetype >= self.TYPE_IMAGE:
+            return "Image file (&{:03X})".format(filetype)
+
+        return "&{:03X}".format(filetype)
+
+    def format_size(self):
+        size = self.size()
+        if size == -1 or size is None:
+            return "Unknown"
+        return "{} bytes".format(size)
+
+    def format_timestamp(self):
+        epochtime = self.epochtime()
+        if epochtime is None:
+            return "Unknown"
+        dt = datetime.datetime.utcfromtimestamp(epochtime)
+        return dt.strftime('%H:%M:%S.X %d %b %Y').replace('X', '{:02}'.format(dt.microsecond / 10000))
 
 
 class FSDirectoryBase(object):
@@ -167,7 +291,8 @@ class FSDirectoryBase(object):
         elif isinstance(name_or_index, (str, unicode)):
 
             namekey = self.fs.normalise_name(name_or_index)
-            fsfile = self.files.get(namekey, None)
+            self.populate_files()
+            fsfile = self._files.get(namekey, None)
             if fsfile is None:
                 raise FSFileNotFoundError("File '{}' not found in {}".format(name_or_index,
                                                                              self.dirname))
@@ -179,17 +304,24 @@ class FSDirectoryBase(object):
     def __len__(self):
         return len(self.files)
 
-    @property
-    def files(self):
-        """
-        Return a list of objects for files within this directory
-        """
+    def invalidate(self):
+        self._files = None
+
+    def populate_files(self):
         if self._files is None:
             filelist = self.get_filelist()
 
             self._files = {}
             for f in filelist:
                 fsfile = self.get_file(f)
-                self._files[fsfile.leafname] = fsfile
+                namekey = self.fs.normalise_name(fsfile.leafname)
+                self._files[namekey] = fsfile
+
+    @property
+    def files(self):
+        """
+        Return a list of objects for files within this directory
+        """
+        self.populate_files()
 
         return sorted(self._files.values())

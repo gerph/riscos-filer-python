@@ -26,18 +26,17 @@ class FSNative(FSBase):
         """
         return FSDirectoryNative(self, None, self.rootname())
 
-    def dir(self, dirname):
+    def rootinfo(self):
         """
-        Return a given directory for a given filesystem.
+        Return a FSFileInfo for the root.
         """
-        parts = self.split(dirname)
-        fsdir = self.rootdir()
-        for index in range(0, len(parts)):
-            dirparts = parts[0:index + 1]
-            filename = self.join(*dirparts)
-            fsdir = FSDirectoryNative(self, fsdir, filename)
+        return FSFileNative(self, '/')
 
-        return fsdir
+    def get_dir(self, dirname, parent_fsdir=None):
+        """
+        Overloadable: Return a given directory for a given filesystem.
+        """
+        return FSDirectoryNative(self, parent_fsdir, dirname)
 
     def native_filename(self, filename):
         if self.anchor == '/' and self.dirsep == '/':
@@ -54,11 +53,36 @@ class FSFileNative(FSFileBase):
         super(FSFileNative, self).__init__(fs, filename, parent)
         self.native_filename = self.fs.native_filename(self.filename)
         self._isdir = None
+        self._stat_read = False
 
     def isdir(self):
         if self._isdir is None:
             self._isdir = os.path.isdir(self.native_filename)
         return self._isdir
+
+    def _stat(self):
+        if not self._stat_read:
+            stat = os.stat(self.native_filename)
+            self._size = stat.st_size
+            self._epochtime = stat.st_mtime
+            self._stat_read = True
+        return
+
+    def open(self, mode='rb'):
+        """
+        Open the file, returning an io like file handle
+
+        @param mode:    Textual mode, like 'r', 'rb', 'w', 'wb'.
+        """
+        return open(self.native_filename, mode)
+
+    def size(self):
+        self._stat()
+        return super(FSFileNative, self).size()
+
+    def epochtime(self):
+        self._stat()
+        return super(FSFileNative, self).epochtime()
 
 
 class FSDirectoryNative(FSDirectoryBase):

@@ -8,6 +8,8 @@ import wx
 from wx.svg import SVGimage
 import wx.lib.scrolledpanel as scrolled
 
+from fsinfo import FSFileInfoFrame
+
 
 class SVGForFiletype(object):
     """
@@ -44,63 +46,98 @@ svg_for_filetype = SVGForFiletype()
 
 class FSFileIcon(wx.Panel):
 
+    min_icon_width = 64
+    icon_padding = 4
+    default_icon_height = 56
     inner_spacing = 4
 
-    def __init__(self, frame, parent, icon_width, icon_height, fsfile, *args, **kwargs):
+    def __init__(self, frame, parent, text_width, text_height, fsfile, *args, **kwargs):
         kwargs['style'] = wx.DEFAULT_FRAME_STYLE ^ wx.RESIZE_BORDER
-        super(FSFileIcon, self).__init__(parent, *args, **kwargs)
-
-        text_height = 16
 
         self.frame = frame
         self.parent = parent
-        self.icon_width = icon_width
-        self.icon_height = icon_height
-        self.bitmap_width = icon_width
-        self.bitmap_height = icon_height - self.inner_spacing - text_height
+        self.max_text_width = text_width
+        self.max_text_height = text_height
+        self.requested_icon_height = kwargs.pop('icon_height', self.default_icon_height)
+        self.requested_text_width = max(self.min_icon_width, text_width)
         self.fsfile = fsfile
 
+        super(FSFileIcon, self).__init__(parent, *args, **kwargs)
+
         self.selected = False
+        self.sprite_icon = None
 
-        self.icon_size = wx.Size(self.icon_width, self.icon_height)
-        bitmap_size = wx.Size(self.bitmap_width, self.bitmap_height)
-        self.statbmp = wx.BitmapButton(self, -1, style=wx.BORDER_NONE | wx.BU_EXACTFIT | wx.BU_NOTEXT)
+        self.text_size = self.GetTextSize()
+        self.bitmap_size = self.GetSpriteSize()
+        self.icon_size = self.GetIconSize()
 
-        filetype = fsfile.filetype()
-        if fsfile.isdir():
-            filetype = svg_for_filetype.FILETYPE_DIRECTORY
-        svg = svg_for_filetype.get_svg(filetype)
-        aspect = float(svg.width) / svg.height
-        bitmap_size = wx.Size(self.bitmap_height * aspect, self.bitmap_height)
-        bmp = svg.ConvertToScaledBitmap(bitmap_size)
-
-        self.statbmp.SetBitmap(bmp)
-        self.statbmp.SetMinSize(bitmap_size)
-        self.statbmp.SetMaxSize(bitmap_size)
-
-        self.stattxt = wx.Button(self, -1, label=self.fsfile.leafname,
-                                 style=wx.ALIGN_CENTRE_HORIZONTAL | wx.BORDER_NONE | wx.BU_EXACTFIT)
-        self.stattxt.SetMaxSize(wx.Size(self.icon_width, text_height))
-        self.stattxt.SetMinSize(wx.Size(self.icon_width, text_height))
-
-        vsizer = wx.BoxSizer(wx.VERTICAL)
-
-        vsizer.Add(self.statbmp, 0, wx.ALIGN_CENTER_HORIZONTAL, 0)
-        vsizer.AddSpacer(self.inner_spacing)
-        vsizer.Add(self.stattxt, 0, wx.EXPAND | wx.ALL, 0)
+        self.sprite_icon = self.GetSpriteIcon()
+        self.text_icon = self.GetTextIcon()
 
         self.SetMaxSize(self.icon_size)
         self.SetMinSize(self.icon_size)
-        self.SetSizerAndFit(vsizer)
-        if not self.IsDoubleBuffered():
-            self.SetDoubleBuffered(True)  # Reduce flicker on size event.
 
-        for obj in (self.statbmp, self.stattxt):
+        self.sizer = self.SetupSizer()
+        self.icons = self.GetButtonIcons()
+
+        for obj in self.icons:
             obj.Bind(wx.EVT_LEFT_DOWN, self.on_click)
             obj.Bind(wx.EVT_LEFT_DCLICK, self.on_click)
             obj.Bind(wx.EVT_RIGHT_DOWN, self.on_click)
             obj.Bind(wx.EVT_RIGHT_DCLICK, self.on_click)
             obj.Bind(wx.EVT_MIDDLE_DOWN, self.on_click)
+
+    def SetupSizer(self):
+        vsizer = wx.BoxSizer(wx.VERTICAL)
+
+        vsizer.Add(self.sprite_icon, 0, wx.ALIGN_CENTER_HORIZONTAL, 0)
+        vsizer.AddSpacer(self.inner_spacing)
+        vsizer.Add(self.text_icon, 0, wx.EXPAND | wx.ALL, 0)
+
+        self.SetSizerAndFit(vsizer)
+        if not self.IsDoubleBuffered():
+            self.SetDoubleBuffered(True)  # Reduce flicker on size event.
+
+        return vsizer
+
+    def GetButtonIcons(self):
+        return [self.sprite_icon, self.text_icon]
+
+    def GetIconSize(self):
+        width = max(self.text_size[0], self.bitmap_size[0])
+        height = self.text_size[1] + self.inner_spacing + self.bitmap_size[1]
+        return wx.Size(width, height)
+
+    def GetTextSize(self):
+        return wx.Size(self.requested_text_width, self.max_text_height)
+
+    def GetSpriteSize(self):
+        bitmap_width = self.requested_text_width
+        bitmap_height = self.requested_icon_height - self.inner_spacing - self.text_size[1]
+        return wx.Size(bitmap_width, bitmap_height)
+
+    def GetSpriteIcon(self):
+        sprite_icon = wx.BitmapButton(self, -1, style=wx.BORDER_NONE | wx.BU_EXACTFIT | wx.BU_NOTEXT)
+
+        filetype = self.fsfile.filetype()
+        if self.fsfile.isdir():
+            filetype = svg_for_filetype.FILETYPE_DIRECTORY
+        svg = svg_for_filetype.get_svg(filetype)
+        aspect = float(svg.width) / svg.height
+        actual_size = wx.Size(self.bitmap_size[1] * aspect, self.bitmap_size[1])
+        bmp = svg.ConvertToScaledBitmap(actual_size)
+
+        sprite_icon.SetBitmap(bmp)
+        sprite_icon.SetMinSize(actual_size)
+        sprite_icon.SetMaxSize(actual_size)
+        return sprite_icon
+
+    def GetTextIcon(self):
+        text_icon = wx.Button(self, -1, label=self.fsfile.leafname,
+                              style=wx.ALIGN_CENTRE_HORIZONTAL | wx.BORDER_NONE | wx.BU_EXACTFIT)
+        text_icon.SetMaxSize(self.text_size)
+        text_icon.SetMinSize(self.text_size)
+        return text_icon
 
     def select(self, state=None):
         if state is None:
@@ -116,82 +153,223 @@ class FSFileIcon(wx.Panel):
                 self.SetBackgroundColour(None)
 
             # Ensure that the buttons aren't highlighted too.
-            self.statbmp.SetBackgroundColour(None)
-            self.stattxt.SetBackgroundColour(None)
+            self.sprite_icon.SetBackgroundColour(None)
+            self.text_icon.SetBackgroundColour(None)
             self.Refresh()
 
     def on_click(self, event):
-        double = event.LeftDClick() or event.RightDClick()
-        if self.frame.debug:
-            print("Click: %r, Double: %r" % (self.fsfile, double))
-
-        # Ensure that we get focus when we do this.
+        # Ensure that we get focus when we do this (and raise as otherwise we don't get keys)
+        self.frame.Raise()
         self.frame.SetFocus()
 
-        button = 'NONE'
-        if double:
-            if event.LeftDClick():
-                button = 'SELECT'
-            elif event.RightDClick():
-                button = 'ADJUST'
-        else:
-            if event.LeftDown():
-                button = 'SELECT'
-            elif event.RightDown():
-                button = 'ADJUST'
-            elif event.MiddleDown():
-                button = 'MENU'
-
-        # Now let's transform these if we're use the non-RISC OS mouse model
-        if not self.frame.mouse_model_riscos:
-            # The non-RISC OS mouse model is:
-            #   ctrl+left toggles items
-            #   right opens menu
-            if button == 'ADJUST':
-                # Right button means Menu
-                button = 'MENU'
-
-            elif button == 'SELECT' and self.frame.control_down:
-                # If they had control down, we change this to the Adjust button (1)
-                button = 'ADJUST'
+        button = self.frame.click_event_to_button(event)
 
         if self.frame.debug:
-            print("Mouse: double=%r button=%r" % (double, button))
+            print("File Click: Button=%r" % (button,))
 
-        if double:
-            # Double click
-            if button == 'SELECT':
-                # Run object
-                # (deselect item first)
-                self.select(False)
-                self.frame.OnFileActivate(self.fsfile, close=False)
+        if button == 'D-SELECT':
+            # Run object
+            # (deselect item first)
+            self.select(False)
+            self.frame.OnFileActivate(self.fsfile, close=False)
 
-            elif button == 'ADJUST':
-                # Run object and close window
-                self.frame.OnFileActivate(self.fsfile, close=True)
-        else:
-            if button == 'SELECT':
+        elif button == 'D-ADJUST':
+            # Run object and close window
+            self.frame.OnFileActivate(self.fsfile, close=True)
+
+        elif button == 'SELECT':
+            self.frame.DeselectAll()
+            self.select()
+
+        elif button == 'ADJUST':
+            self.select()
+
+        elif button == 'MENU':
+            if not self.selected:
                 self.frame.DeselectAll()
                 self.select()
+            self.frame.on_file_menu(self.fsfile)
 
-            elif button == 'ADJUST':
-                self.select()
 
-            elif button == 'MENU':
-                if not self.selected:
-                    self.select()
-                self.frame.on_file_menu(self.fsfile)
+class LeftAlignedIcons(object):
+
+    def __init__(self, parent, text=None, total_width=0, text_icon=None):
+        self.hsizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.parent = parent
+        self.icons = []
+        self.text_width = 0
+        self.text_height = 0
+
+        # The main text icon
+        if text is not None:
+            text_icon = wx.Button(self.parent, -1, label=text.replace('&', '&&'),
+                                  style=wx.BU_LEFT | wx.ALIGN_LEFT | wx.BORDER_NONE)
+
+            dc = wx.ScreenDC()
+            size = dc.GetTextExtent(text)
+            self.text_width = size[0] + 4
+            self.text_height = size[1]
+
+            size = wx.Size(self.text_width, self.text_height)
+            text_icon.SetMaxSize(size)
+            text_icon.SetMinSize(size)
+
+        else:
+            (self.text_width, self.text_height) = text_icon.GetMaxSize()
+
+        self.text_icon = text_icon
+        self.icons.append(self.text_icon)
+        self.hsizer.Add(self.text_icon, 0, 0, 0)
+
+        # The padding that sits beside it
+        padding_width = total_width - self.text_width
+        if padding_width > 0:
+            padding = wx.Button(self.parent, -1, label='',
+                                size=wx.Size(padding_width, self.text_height),
+                                style=wx.BU_LEFT | wx.ALIGN_LEFT | wx.BORDER_NONE | wx.BU_EXACTFIT)
+            self.hsizer.Add(padding, 0, wx.EXPAND | wx.ALL)
+            self.icons.append(padding)
+
+
+class FSFileLargeIcon(FSFileIcon):
+    pass
+
+
+class FSFileSmallIcon(FSFileIcon):
+    icon_height = 20
+
+    def __init__(self, frame, parent, text_width, text_height, fsfile, *args, **kwargs):
+        kwargs['icon_height'] = self.icon_height
+        self.filename_icons = []
+        super(FSFileSmallIcon, self).__init__(frame, parent, text_width, text_height, fsfile, *args, **kwargs)
+
+    def SetupSizer(self):
+        hsizer = wx.BoxSizer(wx.HORIZONTAL)
+
+        hsizer.Add(self.sprite_icon, 0, wx.ALIGN_CENTER_VERTICAL, 0)
+        hsizer.AddSpacer(self.inner_spacing)
+
+        self.filename_icons = LeftAlignedIcons(self, text_icon=self.text_icon, total_width=self.requested_text_width)
+        hsizer.Add(self.filename_icons.hsizer, 0, 0, 0)
+        self.AddExtraIcons(hsizer)
+
+        self.SetSizerAndFit(hsizer)
+        if not self.IsDoubleBuffered():
+            self.SetDoubleBuffered(True)  # Reduce flicker on size event?
+
+        return hsizer
+
+    def AddExtraIcons(self, hsizer):
+        pass
+
+    def GetIconSize(self):
+        width = self.requested_text_width + self.inner_spacing + self.bitmap_size[0]
+        height = max(self.text_size[1], self.bitmap_size[1])
+        return wx.Size(width, height)
+
+    def GetSpriteSize(self):
+        return wx.Size(self.requested_icon_height, self.requested_icon_height)
+
+    def GetTextSize(self):
+        dc = wx.ScreenDC()
+        size = dc.GetTextExtent(self.fsfile.leafname)
+        return wx.Size(size[0] + 4, size[1])
+
+    def GetTextIcon(self):
+        text_icon = wx.Button(self, -1, label=self.fsfile.leafname,
+                              style=wx.BU_LEFT | wx.ALIGN_LEFT | wx.BORDER_NONE)
+
+        text_icon.SetMaxSize(self.text_size)
+        text_icon.SetMinSize(self.text_size)
+
+        return text_icon
+
+    def GetButtonIcons(self):
+        icons = [self.sprite_icon]
+        icons.extend(self.filename_icons.icons)
+        return icons
+
+
+class FSFileFullInfoIcon(FSFileSmallIcon):
+    # FIXME: This is not at all efficient - we should really rethink how these rows are drawn
+    # as lots of objects really makes it slow.
+    filetype_template_string = "MMMMMMMM"
+    timestamp_template_string = "00:00:00.00 00 MMM 0000"
+    size_template_string = "XXXXXXXXXX bytes"
+
+    cached_filetype_size = None
+    cached_timestamp_size = None
+    cached_size_size = None
+
+    def __init__(self, frame, parent, text_width, text_height, fsfile, *args, **kwargs):
+        super(FSFileFullInfoIcon, self).__init__(frame, parent, text_width, text_height, fsfile, *args, **kwargs)
+        self.filetype_size = None
+        self.size_icons = None
+        self.timestamp_icons = None
+        self.filetype_icons = None
+
+    def GetSizeSize(self):
+        if not self.cached_size_size:
+            dc = wx.ScreenDC()
+            size = dc.GetTextExtent(self.size_template_string)
+            self.__class__.cached_size_size = wx.Size(size[0] + 4, size[1])
+        return self.cached_size_size
+
+    def GetFiletypeSize(self):
+        if not self.cached_filetype_size:
+            dc = wx.ScreenDC()
+            size = dc.GetTextExtent(self.filetype_template_string)
+            self.__class__.cached_filetype_size = wx.Size(size[0] + 4, size[1])
+        return self.cached_filetype_size
+
+    def GetTimestampSize(self):
+        if not self.cached_timestamp_size:
+            dc = wx.ScreenDC()
+            size = dc.GetTextExtent(self.timestamp_template_string)
+            self.__class__.cached_timestamp_size = wx.Size(size[0] + 4, size[1])
+        return self.cached_timestamp_size
+
+    def GetIconSize(self):
+        width = self.requested_text_width + self.inner_spacing + self.bitmap_size[0]
+        width += self.inner_spacing + self.GetSizeSize()[0]
+        width += self.inner_spacing + self.GetFiletypeSize()[0]
+        width += self.inner_spacing + self.GetTimestampSize()[0]
+        height = max(self.text_size[1], self.bitmap_size[1])
+        return wx.Size(width, height)
+
+    def GetButtonIcons(self):
+        icons = [self.sprite_icon]
+        icons.extend(self.filename_icons.icons)
+        icons.extend(self.size_icons.icons)
+        icons.extend(self.filetype_icons.icons)
+        icons.extend(self.timestamp_icons.icons)
+        return icons
+
+    def AddExtraIcons(self, hsizer):
+        self.size_icons = LeftAlignedIcons(self, text=self.fsfile.format_size(), total_width=self.GetSizeSize()[0])
+        hsizer.Add(self.size_icons.hsizer, 0, 0, 0)
+        hsizer.AddSpacer(self.inner_spacing)
+
+        self.filetype_icons = LeftAlignedIcons(self, text=self.fsfile.format_filetype(), total_width=self.GetFiletypeSize()[0])
+        hsizer.Add(self.filetype_icons.hsizer, 0, 0, 0)
+        hsizer.AddSpacer(self.inner_spacing)
+
+        self.timestamp_icons = LeftAlignedIcons(self, text=self.fsfile.format_timestamp(), total_width=self.GetTimestampSize()[0])
+        hsizer.Add(self.timestamp_icons.hsizer, 0, 0, 0)
+        hsizer.AddSpacer(self.inner_spacing)
 
 
 class FSExplorerPanel(scrolled.ScrolledPanel):
 
-    min_icon_width = 96
+    min_text_width = 96
     icon_padding = 4
-    icon_spacing = 8
+    icon_spacing = 4
     icon_height = 56
+    default_display_format = 'large'
 
     def __init__(self, parent, *args, **kwargs):
         self.parent = parent
+        self.display_format = kwargs.pop('display_format', self.default_display_format)
 
         kwargs['style'] = wx.VSCROLL
         super(FSExplorerPanel, self).__init__(parent, *args, **kwargs)
@@ -214,11 +392,19 @@ class FSExplorerPanel(scrolled.ScrolledPanel):
             size = dc.GetTextExtent(fsfile.leafname)
             self.text_width[fsfile.leafname] = size[0] + self.icon_padding
 
-        icon_width = self.min_icon_width
-        icon_width = max(icon_width, *self.text_width.values())
+        size = dc.GetTextExtent("M_^")
+        text_height = size[1]
+
+        text_width = self.min_text_width
+        text_width = max(text_width, *self.text_width.values())
 
         for fsfile in self.parent.files:
-            btn = FSFileIcon(self.parent, self, icon_width, self.icon_height, fsfile)
+            if self.display_format == 'large':
+                btn = FSFileLargeIcon(self.parent, self, text_width, text_height, fsfile)
+            elif self.display_format == 'small':
+                btn = FSFileSmallIcon(self.parent, self, text_width, text_height, fsfile)
+            else:
+                btn = FSFileFullInfoIcon(self.parent, self, text_width, text_height, fsfile)
             filer_sizer.Add(btn, 0, wx.ALL, self.icon_spacing)
             self.icons[fsfile.leafname] = btn
 
@@ -250,24 +436,6 @@ class FSExplorerPanel(scrolled.ScrolledPanel):
         return region
 
 
-class FSExplorers(object):
-    """
-    An object that tracks the explorer frames.
-    """
-
-    def __init__(self):
-        self.open_windows = {}
-
-    def update_closed(self, dirname):
-        del self.open_windows[dirname]
-
-    def update_opened(self, dirname, window):
-        self.open_windows[dirname] = window
-
-    def find_window(self, dirname):
-        return self.open_windows.get(dirname, None)
-
-
 class FSExplorerFrame(wx.Frame):
 
     has_title_area = True
@@ -276,12 +444,14 @@ class FSExplorerFrame(wx.Frame):
     default_width = 640
     default_height = 480
     mouse_model_riscos = False
+    default_display_format = 'large'
 
     def __init__(self, fs, dirname, *args, **kwargs):
         self.fs = fs
         self.dirname = dirname
         self.fsdir = self.fs.dir(dirname)
         self.explorers = kwargs.pop('explorers', None)
+        self.display_format = kwargs.pop('display_format', self.default_display_format)
         self.panel = None
         self._title_text = None
         self._title_widget = None
@@ -300,28 +470,117 @@ class FSExplorerFrame(wx.Frame):
 
         self.create_panel()
 
-        # We track keys so that the right events can be delivered for running
-        # or opening files with control keys pressed.
-        self.panel.Bind(wx.EVT_KEY_DOWN, lambda event: self.on_key(event, down=True))
-        self.panel.Bind(wx.EVT_KEY_UP, lambda event: self.on_key(event, down=False))
-        # We want regular characters for the cases where we're controlling by
-        # the keyboard.
-        self.panel.Bind(wx.EVT_CHAR, self.on_key_char)
+        self.Bind(wx.EVT_CLOSE, self.on_close)
 
         # Build up the menu we'll use
+        self.display_menu = wx.Menu()
+        self.add_menu_display(self.display_menu)
+        self.selection_menu = wx.Menu()
+        self.add_menu_file_selection(self.selection_menu)
+
         self.menu = wx.Menu()
+        self.menu.Append(-1, 'Display', self.display_menu)
+        self.selection_menu_item = self.menu.Append(-1, 'Selection', self.selection_menu)
         self.add_menu_selection(self.menu)
+        self.add_menu_dirop(self.menu)
+
+    def click_event_to_button(self, event):
+        """
+        Convert from a click event to an action that we can perform.
+
+        @param event:   The event to process
+
+        @return: button name, in RISC OS terms, preceeded by 'D-' for double click
+        """
+        double = event.LeftDClick() or event.RightDClick()
+        button = 'NONE'
+        if double:
+            if event.LeftDClick():
+                button = 'SELECT'
+            elif event.RightDClick():
+                button = 'ADJUST'
+        else:
+            if event.LeftDown():
+                button = 'SELECT'
+            elif event.RightDown():
+                button = 'ADJUST'
+            elif event.MiddleDown():
+                button = 'MENU'
+
+        # Now let's transform these if we're use the non-RISC OS mouse model
+        if not self.mouse_model_riscos:
+            # The non-RISC OS mouse model is:
+            #   ctrl+left toggles items
+            #   right opens menu
+            if button == 'ADJUST':
+                # Right button means Menu
+                button = 'MENU'
+
+            elif button == 'SELECT' and self.control_down:
+                # If they had control down, we change this to the Adjust button (1)
+                button = 'ADJUST'
+
+        if button != 'NONE':
+            if double:
+                button = 'D-' + button
+
+        return button
+
+    def on_click(self, event):
+        # Ensure that we get focus when we do this (and raise as otherwise we don't get keys)
+        self.Raise()
+        self.SetFocus()
+
+        button = self.click_event_to_button(event)
+
+        if self.debug:
+            print("Window Click: Button%r" % (button,))
+
+        if button in ('D-SELECT', 'D-ADJUST', 'SELECT'):
+            # A plain click on the background should deselect everything,
+            # but not if adjust is pressed. Adjust is 'amend the selection'
+            # so amending on nothing should leave things alone.
+            self.DeselectAll()
+
+        elif button == 'ADJUST':
+            # Do nothing
+            pass
+
+        elif button == 'MENU':
+            self.on_file_menu(None)
 
     def add_menuitem(self, menu, name, func):
         menuitem = menu.Append(-1, name, kind=wx.ITEM_NORMAL)
         self.Bind(wx.EVT_MENU, func, menuitem)
 
+    def add_menu_display(self, menu):
+        """
+        Add menu items for the 'Display' submenu.
+        """
+        self.add_menuitem(menu, 'Large icons', lambda event: self.SetDisplayFormat('large'))
+        self.add_menuitem(menu, 'Small icons', lambda event: self.SetDisplayFormat('small'))
+        self.add_menuitem(menu, 'Full info', lambda event: self.SetDisplayFormat('fullinfo'))
+
     def add_menu_selection(self, menu):
-        self.add_menuitem(menu, 'Select all', lambda event: self.SelectAll())
+        """
+        Add menu items related to making a selection.
+        """
+        self.add_menuitem(menu, 'Select all\tctrl-A', lambda event: self.SelectAll())
         self.add_menuitem(menu, 'Clear selection', lambda event: self.DeselectAll())
+
+    def add_menu_file_selection(self, menu):
+        """
+        Add menu items related to a file selection
+        """
+        self.add_menuitem(menu, 'Info...', lambda event: self.OnSelectionInfo())
+
+    def add_menu_dirop(self, menu):
+        self.add_menuitem(menu, 'Refresh directory\tctrl-R', lambda event: self.RefreshDirectory())
 
     def on_key(self, event, down):
         keycode = event.GetKeyCode()
+        if self.debug:
+            print("Key: code = %r, down = %r" % (keycode, down))
         if keycode == wx.WXK_SHIFT:
             if self.debug:
                 print("Key: Shift: %r" % (down,))
@@ -337,6 +596,17 @@ class FSExplorerFrame(wx.Frame):
         Handle any extra key codes - don't have any yet.
         """
         keycode = event.GetKeyCode()
+        if self.debug:
+            print("KeyChar: code = %r" % (keycode,))
+
+        if keycode == ord('A') and self.control_down:
+            # ctrl-A
+            self.SelectAll()
+
+        elif keycode == ord('R') and self.control_down:
+            # ctrl-R
+            wx.CallAfter(self.RefreshDirectory)
+
         event.Skip()
 
     def GetTitleText(self):
@@ -362,32 +632,70 @@ class FSExplorerFrame(wx.Frame):
         text = self.GetFrameTitleText()
         self.SetTitle(text)
 
-    def create_panel(self):
+    def create_panel(self, keep_selection=True):
+        last_selection = set()
         if self.panel:
+            # Construct a list of the last selected icons in the panel
+            if keep_selection:
+                for fsicon in self.panel.icons.values():
+                    if fsicon.selected:
+                        last_selection.add(fsicon.fsfile.leafname)
+
             self.panel.Destroy()
             self.panel = None
 
         self.files = sorted(self.fsdir.files, key=lambda f: f.leafname.lower())
 
         # Make a title area and sizer for the upper part of the panel
-        self.panel = FSExplorerPanel(self)
+        self.panel = FSExplorerPanel(self, display_format=self.display_format)
+        self.Layout()
+
+        # Now re-select the old selection
+        for leafname in last_selection:
+            self.SelectFile(leafname)
+
+        # We track keys so that the right events can be delivered for running
+        # or opening files with control keys pressed.
+        self.panel.Bind(wx.EVT_KEY_DOWN, lambda event: self.on_key(event, down=True))
+        self.panel.Bind(wx.EVT_KEY_UP, lambda event: self.on_key(event, down=False))
+        # We want regular characters for the cases where we're controlling by
+        # the keyboard.
+        self.panel.Bind(wx.EVT_CHAR, self.on_key_char)
+        self.panel.Bind(wx.EVT_LEFT_DOWN, self.on_click)
+        self.panel.Bind(wx.EVT_LEFT_DCLICK, self.on_click)
+        self.panel.Bind(wx.EVT_RIGHT_DOWN, self.on_click)
+        self.panel.Bind(wx.EVT_RIGHT_DCLICK, self.on_click)
+        self.panel.Bind(wx.EVT_MIDDLE_DOWN, self.on_click)
 
         if self.explorers:
-            self.explorers.update_opened(self.dirname, self)
+            self.explorers.window_has_closed(self.dirname)
+            self.explorers.window_has_opened(self.dirname, self)
 
-    def Close(self):
-        super(FSExplorerFrame, self).Close()
+    def RefreshDirectory(self):
+        self.fs.invalidate_dir(self.dirname)
+        self.fsdir.invalidate()
+        self.create_panel()
+
+    def on_close(self, event):
         if self.explorers:
-            self.explorers.update_closed(self.dirname)
+            self.explorers.window_has_closed(self.dirname)
+        # This event is informational, so we pass on.
+        event.Skip()
 
     def ChangeDirectory(self, dirname):
         if self.panel:
             if self.explorers:
-                self.explorers.update_closed(self.dirname)
+                self.explorers.window_has_closed(self.dirname)
 
         self.dirname = dirname
         self.fsdir = self.fs.dir(dirname)
+        self.create_panel(keep_selection=False)
+        self.UpdateFrameTitleText()
+
+    def SetDisplayFormat(self, display_format):
+        self.display_format = display_format
         self.create_panel()
+        # The title text might be affected by the display format
         self.UpdateFrameTitleText()
 
     def SelectFile(self, leafname, state=True):
@@ -402,10 +710,47 @@ class FSExplorerFrame(wx.Frame):
     def DeselectAll(self):
         self.SelectAll(state=False)
 
+    def ApplySelectedFiles(self, func):
+        for fsicon in self.panel.icons.values():
+            if fsicon.selected:
+                func(fsicon.fsfile)
+
+    def GetSelectedFileIcons(self):
+        selection = [fsicon for fsicon in self.panel.icons.values() if fsicon.selected]
+        return selection
+
     def on_file_menu(self, fsfile):
         if self.debug:
             print("Menu: %r" % (fsfile,))
+
+        # Prepare the menu to display files
+        selection = self.GetSelectedFileIcons()
+        if len(selection) == 0:
+            # No files selected, so we need to grey out the selection menu
+            self.selection_menu_item.Enable(False)
+            self.selection_menu_item.SetItemLabel("Selection")
+        else:
+            self.selection_menu_item.Enable(True)
+            if len(selection) == 1:
+                self.selection_menu_item.SetItemLabel("File '{}'".format(selection[0].fsfile.leafname))
+            else:
+                self.selection_menu_item.SetItemLabel("Selection")
+
         self.PopupMenu(self.menu)
+
+    def GetNextFramePos(self, counter=0):
+        """
+        Return a position on the screen for the next window to open at.
+        """
+        # We would like frames to appear in different positions when they're opened
+        # as part of a sequence.
+        counterx = (counter % 8) + ((counter / 8) % 6)
+        countery = (counter % 8) + (((counter / 8) % 6) / 2.0)
+
+        pos = self.GetPosition()
+        pos = (pos.x + int(self.open_offset_x * (counterx + 1)),
+               pos.y + int(self.open_offset_y * (countery + 1)))
+        return pos
 
     def OnFileActivate(self, fsfile, close=False, shift=None):
         if self.debug:
@@ -436,13 +781,113 @@ class FSExplorerFrame(wx.Frame):
         if close:
             self.ChangeDirectory(target)
         else:
-            pos = self.GetPosition()
-            pos = (pos.x + self.open_offset_x, pos.y + self.open_offset_y)
+            pos = self.GetNextFramePos()
             self.OpenExplorer(target, pos=pos)
 
     def OpenExplorer(self, target, pos):
-        win = FSExplorerFrame(self.fs, target, None, -1,
-                              explorers=self.explorers,
-                              pos=pos,
-                              size=(self.default_width, self.default_height))
-        win.Show(True)
+        self.explorers.open_window(target, pos, self.display_format)
+
+    def OnSelectionInfo(self):
+        def open_each(fsfile):
+            self.OnFileInfo(fsfile, counter=open_each.counter)
+            open_each.counter += 1
+        open_each.counter = 0
+
+        self.ApplySelectedFiles(open_each)
+
+    def OnFileInfo(self, fsfile, counter=0):
+        if self.debug:
+            print("Info: %r" % (fsfile,))
+        pos = self.GetNextFramePos(counter)
+        if self.explorers:
+            self.explorers.open_fileinfo(fsfile.filename, pos=pos)
+        else:
+            fsfileinfo = FSFileInfoFrame(self, fsfile, pos=pos)
+            fsfileinfo.Show()
+
+
+class FSExplorers(object):
+    """
+    An object that tracks the explorer frames.
+    """
+    explorer_frame_cls = FSExplorerFrame
+    fileinfo_frame_cls = FSFileInfoFrame
+
+    # The default size of a window, or None to use the explorer_frame_cls values
+    default_width = None
+    default_height = None
+
+    def __init__(self, fs):
+        self.fs = fs
+        self.open_windows = {}
+        self.open_fileinfos = {}
+        self.default_width = self.default_width or self.explorer_frame_cls.default_width
+        self.default_height = self.default_height or self.explorer_frame_cls.default_height
+
+    def fsfile_key(self, filename):
+        """
+        Return a key for the file that has been requested.
+
+        For systems like Windows or RISC OS, this will be a case insensitive name,
+        but for Linux might be an identity.
+        """
+        filenamekey = self.fs.normalise_name(filename)
+        return filenamekey
+
+    def window_has_closed(self, dirname):
+        filenamekey = self.fsfile_key(dirname)
+        if filenamekey in self.open_windows:
+            del self.open_windows[filenamekey]
+
+    def window_has_opened(self, dirname, window):
+        filenamekey = self.fsfile_key(dirname)
+        if filenamekey in self.open_windows:
+            # If there was a window already, force it to close so that we don't get multiple windows on the screen.
+            # Shouldn't happen if these functions are called consistently.
+            self.open_windows[filenamekey].Close()
+        self.open_windows[filenamekey] = window
+
+    def fileinfo_has_closed(self, filename):
+        filenamekey = self.fsfile_key(filename)
+        if filenamekey in self.open_fileinfos:
+            del self.open_fileinfos[filenamekey]
+
+    def fileinfo_has_opened(self, filename, window):
+        filenamekey = self.fsfile_key(filename)
+        if filenamekey in self.open_fileinfos:
+            # If there was a window already, force it to close so that we don't get multiple windows on the screen.
+            # Shouldn't happen if these functions are called consistently.
+            self.open_fileinfos[filenamekey].Close()
+
+        self.open_fileinfos[filenamekey] = window
+
+    def find_window(self, dirname):
+        filenamekey = self.fsfile_key(dirname)
+        return self.open_windows.get(filenamekey, None)
+
+    def open_window(self, dirname, pos=None, display_format=None):
+        win = self.find_window(dirname)
+        if win:
+            win.Raise()
+        else:
+            win = self.explorer_frame_cls(self.fs, dirname, None, -1,
+                                          explorers=self,
+                                          pos=pos,
+                                          size=(self.default_width, self.default_height),
+                                          display_format=display_format)
+            win.Show(True)
+
+        return win
+
+    def find_fileinfo(self, filename):
+        filenamekey = self.fsfile_key(filename)
+        return self.open_fileinfos.get(filenamekey, None)
+
+    def open_fileinfo(self, filename, pos=None):
+        win = self.find_fileinfo(filename)
+        if win:
+            win.Raise()
+        else:
+            fsfile = self.fs.fileinfo(filename)
+            fsfileinfo = self.fileinfo_frame_cls(self, fsfile, pos=pos, explorers=self)
+            fsfileinfo.Show()
