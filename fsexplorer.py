@@ -575,6 +575,7 @@ class FSExplorerFrame(wx.Frame):
         self.add_menuitem(menu, 'Info...', lambda event: self.OnSelectionInfo())
 
     def add_menu_dirop(self, menu):
+        self.add_menuitem(menu, 'Open parent', lambda event: self.OpenParentDirectory())
         self.add_menuitem(menu, 'Refresh directory\tctrl-R', lambda event: self.RefreshDirectory())
 
     def on_key(self, event, down):
@@ -784,8 +785,17 @@ class FSExplorerFrame(wx.Frame):
             pos = self.GetNextFramePos()
             self.OpenExplorer(target, pos=pos)
 
-    def OpenExplorer(self, target, pos):
+    def OpenExplorer(self, target, pos=None):
+        if not pos:
+            pos = self.GetNextFramePos()
         self.explorers.open_window(target, pos, self.display_format)
+
+    def OpenParentDirectory(self, pos=None):
+        target = self.fs.dirname(self.dirname)
+        if self.fs.normalise_name(target) == self.fs.normalise_name(self.dirname):
+            pass
+        else:
+            self.OpenExplorer(target, pos)
 
     def OnSelectionInfo(self):
         def open_each(fsfile):
