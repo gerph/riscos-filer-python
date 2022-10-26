@@ -481,6 +481,7 @@ class FSExplorerFrame(wx.Frame):
         self.menu = wx.Menu()
         self.menu.Append(-1, 'Display', self.display_menu)
         self.selection_menu_item = self.menu.Append(-1, 'Selection', self.selection_menu)
+        self.clearselection_menu_item = None
         self.add_menu_selection(self.menu)
         self.openparent_menu_item = None
         self.add_menu_dirop(self.menu)
@@ -568,7 +569,7 @@ class FSExplorerFrame(wx.Frame):
         Add menu items related to making a selection.
         """
         self.add_menuitem(menu, 'Select all\tctrl-A', lambda event: self.SelectAll())
-        self.add_menuitem(menu, 'Clear selection', lambda event: self.DeselectAll())
+        self.clearselection_menu_item = self.add_menuitem(menu, 'Clear selection', lambda event: self.DeselectAll())
 
     def add_menu_file_selection(self, menu):
         """
@@ -732,12 +733,14 @@ class FSExplorerFrame(wx.Frame):
             # No files selected, so we need to grey out the selection menu
             self.selection_menu_item.Enable(False)
             self.selection_menu_item.SetItemLabel("Selection")
+            self.clearselection_menu_item.Enable(False)
         else:
             self.selection_menu_item.Enable(True)
             if len(selection) == 1:
                 self.selection_menu_item.SetItemLabel("File '{}'".format(selection[0].fsfile.leafname))
             else:
-                self.selection_menu_item.SetItemLabel("Selection")
+                self.selection_menu_item.SetItemLabel("File ''")
+            self.clearselection_menu_item.Enable(True)
 
         # Only show the parent if there is one
         self.openparent_menu_item.Enable(bool(self.MenuHasOpenParent()))
