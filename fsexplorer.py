@@ -482,6 +482,7 @@ class FSExplorerFrame(wx.Frame):
         self.menu.Append(-1, 'Display', self.display_menu)
         self.selection_menu_item = self.menu.Append(-1, 'Selection', self.selection_menu)
         self.add_menu_selection(self.menu)
+        self.openparent_menu_item = None
         self.add_menu_dirop(self.menu)
 
     def click_event_to_button(self, event):
@@ -552,6 +553,7 @@ class FSExplorerFrame(wx.Frame):
     def add_menuitem(self, menu, name, func):
         menuitem = menu.Append(-1, name, kind=wx.ITEM_NORMAL)
         self.Bind(wx.EVT_MENU, func, menuitem)
+        return menuitem
 
     def add_menu_display(self, menu):
         """
@@ -575,7 +577,7 @@ class FSExplorerFrame(wx.Frame):
         self.add_menuitem(menu, 'Info...', lambda event: self.OnSelectionInfo())
 
     def add_menu_dirop(self, menu):
-        self.add_menuitem(menu, 'Open parent', lambda event: self.OpenParentDirectory())
+        self.openparent_menu_item = self.add_menuitem(menu, 'Open parent', lambda event: self.OpenParentDirectory())
         self.add_menuitem(menu, 'Refresh directory\tctrl-R', lambda event: self.RefreshDirectory())
 
     def on_key(self, event, down):
@@ -737,6 +739,9 @@ class FSExplorerFrame(wx.Frame):
             else:
                 self.selection_menu_item.SetItemLabel("Selection")
 
+        # Only show the parent if there is one
+        self.openparent_menu_item.Enable(bool(self.MenuHasOpenParent()))
+
         self.PopupMenu(self.menu)
 
     def GetNextFramePos(self, counter=0):
@@ -790,11 +795,15 @@ class FSExplorerFrame(wx.Frame):
             pos = self.GetNextFramePos()
         self.explorers.open_window(target, pos, self.display_format)
 
-    def OpenParentDirectory(self, pos=None):
+    def MenuHasOpenParent(self):
         target = self.fs.dirname(self.dirname)
         if self.fs.normalise_name(target) == self.fs.normalise_name(self.dirname):
-            pass
-        else:
+            return None
+        return target
+
+    def OpenParentDirectory(self, pos=None):
+        target = MenuHasOpenParent()
+        if target:
             self.OpenExplorer(target, pos)
 
     def OnSelectionInfo(self):
