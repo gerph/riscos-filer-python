@@ -72,7 +72,7 @@ class FSBase(object):
         # did not exist.
         parent = self.dirname(dirname)
         parent_fsdir = None
-        if dirname != parent:
+        if dirname != parent and dirname != '':
             parent_fsdir = self.dir(parent)
 
         fsdir = self.get_dir(dirname, parent_fsdir)

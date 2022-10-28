@@ -950,7 +950,7 @@ class FSExplorerFrame(wx.Frame):
         return target
 
     def OpenParentDirectory(self, pos=None):
-        target = MenuHasOpenParent()
+        target = self.MenuHasOpenParent()
         if target:
             self.OpenExplorer(target, pos)
 
