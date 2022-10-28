@@ -100,7 +100,7 @@ class FSBase(object):
 
     def rootinfo(self):
         """
-        Return a FSFileInfo for the root.
+        Return a FSFile for the root.
         """
         raise NotImplementedError("{}.rootinfo() is not implemented".format(self.__class__.__name__))
 
@@ -174,8 +174,8 @@ class FSBase(object):
         """
         if filename is None or not self.supports_delete:
             return self.supports_delete
-        fsfile = self.fs.fileinfo(filename)
-        return fsfile
+        fsfile = self.fileinfo(filename)
+        return fsfile.can_delete()
 
     def mkdir(self, dirname):
         """
@@ -183,7 +183,7 @@ class FSBase(object):
 
         @param dirname: Directory to create.
         """
-        if not supports_mkdir:
+        if not self.supports_mkdir:
             raise FSWriteFailedError("{}.mkdir() is not supported".format(self.__class__.__name__))
 
         fsdir = self.dir(dirname)
@@ -201,7 +201,7 @@ class FSFileBase(object):
     def __init__(self, fs, filename, size=None, epochtime=None, parent=None):
         self.fs = fs
         self.filename = filename
-        self.leafname = self.fs.leafname(self.filename)
+        (self.dirname, self.leafname) = self.fs.dirandleafname(self.filename)
         self._size = size
         self._epochtime = epochtime
         self._parent = parent
@@ -292,7 +292,7 @@ class FSFileBase(object):
         Delete this file.
         """
         if not self.can_delete():
-            raise FSDeleteFailedError("Cannot delete '{}' from '{}'".format(leafname, self.dirname))
+            raise FSDeleteFailedError("Cannot delete '{}' from '{}'".format(self.leafname, self.dirname))
 
         self.do_delete()
         # FIXME: Mark this object as invalid too?
@@ -301,10 +301,8 @@ class FSFileBase(object):
     def do_delete(self):
         """
         Overloadable: Delete the file
-
-        @return: True if this file is deletable.
         """
-        raise FSDeleteFailedError("Cannot delete '{}' from '{}'".format(leafname, self.dirname))
+        raise FSDeleteFailedError("Cannot delete '{}' from '{}'".format(self.leafname, self.dirname))
 
     def format_filetype(self):
         filetype = self.filetype()
@@ -450,7 +448,7 @@ class FSDirectoryBase(object):
             # Any problems mean that we cannot delete
             return False
 
-    def mkdir(self, lefaname):
+    def mkdir(self, leafname):
         """
         Create a directory with a given name.
 
@@ -459,7 +457,7 @@ class FSDirectoryBase(object):
         if not self.is_writeable():
             raise FSWriteFailedError("Directory '{}' is not writeable".format(self.dirname))
 
-        self.do_mkdir(self, leafname)
+        self.do_mkdir(leafname)
         self.invalidate()
 
     def do_mkdir(self, leafname):

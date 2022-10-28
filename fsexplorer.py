@@ -396,7 +396,8 @@ class FSExplorerPanel(scrolled.ScrolledPanel):
         text_height = size[1]
 
         text_width = self.min_text_width
-        text_width = max(text_width, *self.text_width.values())
+        if self.text_width:
+            text_width = max(text_width, *self.text_width.values())
 
         for fsfile in self.parent.files:
             if self.display_format == 'large':
@@ -447,6 +448,7 @@ class FSExplorerFrame(wx.Frame):
     default_display_format = 'large'
     default_sort_format = 'name'
     support_mkdir = True
+    support_delete = True
     support_refresh = True
 
     def __init__(self, fs, dirname, *args, **kwargs):
@@ -595,7 +597,8 @@ class FSExplorerFrame(wx.Frame):
         Add menu items related to a file selection
         """
         self.add_menuitem(menu, 'Info', lambda event: self.OnSelectionInfo())
-        self.menuitem_file_delete = self.add_menuitem(menu, 'Delete', lambda event: self.OnSelectionDelete())
+        if self.support_delete:
+            self.menuitem_file_delete = self.add_menuitem(menu, 'Delete', lambda event: self.OnSelectionDelete())
 
     def add_menu_dirop(self, menu):
         self.menuitem_openparent = self.add_menuitem(menu, 'Open parent', lambda event: self.OpenParentDirectory())
@@ -866,7 +869,7 @@ class FSExplorerFrame(wx.Frame):
 
         # Can we delete ?
         can_delete = False
-        if len(selection) == 0:
+        if not self.support_delete or len(selection) == 0:
             can_delete = False
         else:
             # We need to check all the files to see whether any are deletable.
@@ -878,7 +881,8 @@ class FSExplorerFrame(wx.Frame):
                     if fsicon.fsfile.can_delete():
                         can_delete = True
                         break
-        self.menuitem_file_delete.Enable(can_delete)
+        if self.menuitem_file_delete:
+            self.menuitem_file_delete.Enable(can_delete)
 
         # Only show the parent if there is one
         self.menuitem_openparent.Enable(bool(self.MenuHasOpenParent()))
@@ -957,6 +961,10 @@ class FSExplorerFrame(wx.Frame):
 
         self.ApplySelectedFiles(open_each)
 
+    def OnSelectionDelete(self):
+        # FIXME: This may open many windows, which is not ideal.
+        self.ApplySelectedFiles(self.OnFileDelete)
+
     def OnFileInfo(self, fsfile, counter=0):
         if self.debug:
             print("Info: %r" % (fsfile,))
@@ -966,6 +974,18 @@ class FSExplorerFrame(wx.Frame):
         else:
             fsfileinfo = FSFileInfoFrame(self, fsfile, pos=pos)
             fsfileinfo.Show()
+
+    def OnFileDelete(self, fsfile):
+        if self.debug:
+            print("Delete: %r" % (fsfile,))
+
+        # FIXME: Add a confirmation for the delete
+        try:
+            fsfile.delete()
+            self.RefreshDirectory()
+        except Exception as exc:
+            self.ReportError(title="Failed to delete",
+                             message=str(exc))
 
 
 class FSExplorers(object):
