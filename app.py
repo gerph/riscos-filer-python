@@ -9,6 +9,9 @@ import fsnative
 import fsexplorer
 
 
+show_inspector = False
+
+
 class DemoFrame(wx.Frame):
     """ This window displays a button """
     def __init__(self, title="Example of RISC OS Filer"):
@@ -63,6 +66,10 @@ class MyApp(wx.App):
 
         frame = DemoFrame()
         frame.Show()
+
+        if show_inspector:
+            import wx.lib.inspection
+            wx.lib.inspection.InspectionTool().Show()
 
         return True
 

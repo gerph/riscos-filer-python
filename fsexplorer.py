@@ -79,6 +79,7 @@ class FSFileIcon(wx.Panel):
 
         self.sizer = self.SetupSizer()
         self.icons = self.GetButtonIcons()
+        self.icons.append(self)
 
         for obj in self.icons:
             obj.Bind(wx.EVT_LEFT_DOWN, self.on_click)
