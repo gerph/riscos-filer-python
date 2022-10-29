@@ -370,6 +370,22 @@ class FSFileFullInfoIcon(FSFileSmallIcon):
         hsizer.AddSpacer(self.inner_spacing)
 
 
+class FSExplorerDropTarget(wx.FileDropTarget):
+
+    def __init__(self, frame):
+        super(FSExplorerDropTarget, self).__init__()
+        self.frame = frame
+
+    def OnDropFiles(self, x, y, filenames):
+        """
+        Called when the native explorer drops files here.
+        """
+        handled = False
+        for filepath in filenames:
+            handled = handled or self.frame.on_dropped_file(filepath)
+        return handled
+
+
 class FSExplorerPanel(scrolled.ScrolledPanel):
 
     min_text_width = 96
@@ -427,6 +443,9 @@ class FSExplorerPanel(scrolled.ScrolledPanel):
 
         self.Layout()
 
+        self.drop_target = FSExplorerDropTarget(self.parent)
+        self.SetDropTarget(self.drop_target)
+
     def on_size(self, evt):
         size = self.GetSize()
         vsize = self.GetVirtualSize()
@@ -462,6 +481,7 @@ class FSExplorerFrame(wx.Frame):
     support_delete = True
     support_rename = True
     support_refresh = True
+    support_dropfile = False
 
     def __init__(self, fs, dirname, *args, **kwargs):
         self.fs = fs
@@ -678,6 +698,16 @@ class FSExplorerFrame(wx.Frame):
                     self.ShowCreateDirectory()
 
         event.Skip()
+
+    def on_dropped_file(self, native_filename):
+        if not self.support_dropfile:
+            return False
+
+        if self.debug:
+            print("Drop dropped on explorer: '%s'" % (native_filename,))
+
+        # FIXME: Dropped files not supported yet
+        return False
 
     def GetTitleText(self):
         if self._title_text:
