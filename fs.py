@@ -27,7 +27,15 @@ class FSWriteFailedError(FSError):
     pass
 
 
+class FSMkDirFailedError(FSError):
+    pass
+
+
 class FSDeleteFailedError(FSError):
+    pass
+
+
+class FSRenameFailedError(FSError):
     pass
 
 
@@ -37,6 +45,7 @@ class FSBase(object):
     do_caching = True
     supports_mkdir = False
     supports_delete = False
+    supports_rename = False
 
     def __init__(self):
         self.cached_dirs = {}
@@ -107,7 +116,7 @@ class FSBase(object):
     def fileinfo(self, filename):
         dirname = self.dirname(filename)
         leafname = self.leafname(filename)
-        if dirname == self.rootname and leafname == '':
+        if dirname == self.rootname() and leafname == '':
             return self.rootinfo()
         fsdir = self.dir(dirname)
         return fsdir[leafname]
@@ -177,6 +186,35 @@ class FSBase(object):
         fsfile = self.fileinfo(filename)
         return fsfile.can_delete()
 
+    def can_rename(self, source=None, dest=None):
+        """
+        Check whether we can rename a given file.
+
+        @param dirname: File name to check, or None to check FS capability.
+        """
+        if not self.supports_rename:
+            return False
+        if source is None:
+            # They're only asking about the FS as a whole, so we do support rename
+            return True
+
+        (source_dir, source_leaf) = self.dirandleafname(source)
+        source_fsdir = self.dir(source_dir)
+
+        if dest is not None:
+            (dest_dir, dest_leaf) = self.dirandleafname(dest)
+            dest_fsdir = self.dir(dest_dir)
+        else:
+            dest_dir = None
+            dest_leaf = None
+            dest_fsdir = None
+
+        if source_dir == dest_dir or dest_dir is None:
+            return source_fsdir.can_rename(source_leaf, dest_leaf)
+
+        # FIXME: We don't support moves between directories yet, so this is not supported
+        return False
+
     def mkdir(self, dirname):
         """
         Create a directory with a given name.
@@ -184,11 +222,31 @@ class FSBase(object):
         @param dirname: Directory to create.
         """
         if not self.supports_mkdir:
-            raise FSWriteFailedError("{}.mkdir() is not supported".format(self.__class__.__name__))
+            raise FSMkDirFailedError("{}.mkdir() is not supported".format(self.__class__.__name__))
 
         fsdir = self.dir(dirname)
         leafname = self.leafname(dirname)
         return fsdir.mkdir(leafname)
+
+    def rename(self, source, dest):
+        """
+        Rename a file from one location to another. May move the file.
+
+        @param dirname: Directory to create.
+        """
+        if not self.supports_rename:
+            raise FSRenameFailedError("{}.rename() is not supported".format(self.__class__.__name__))
+
+        (source_dir, source_leaf) = self.dirandleafname(source)
+        (dest_dir, dest_leaf) = self.dirandleafname(dest)
+        if self.normalise_name(source_dir) == self.normalise_name(dest_dir):
+            # The source and destinations are the same, so this is a rename within directory
+            fsdir = self.dir(source_dir)
+            fsdir.rename(source_leaf, dest_leaf)
+            return
+
+        # FIXME: Add a move operation
+        raise FSRenameFailedError("Moving files between directories is not supported")
 
 
 @functools.total_ordering
@@ -363,13 +421,13 @@ class FSDirectoryBase(object):
     def __getitem__(self, name_or_index):
         if isinstance(name_or_index, int):
             # They wanted the file by index
-            names = sorted(self.files)
+            names = sorted(self.files, key=lambda fsfile: fsfile.leafname)
             try:
-                name = names[name_or_index]
+                fsfile = names[name_or_index]
             except IndexError:
                 raise FSFileNotFoundError("File #{} not found in {}".format(name_or_index,
                                                                             self.dirname))
-            return self.files[name]
+            return fsfile
 
         elif isinstance(name_or_index, (str, unicode)):
 
@@ -386,6 +444,11 @@ class FSDirectoryBase(object):
 
     def __len__(self):
         return len(self.files)
+
+    def __contains__(self, name):
+        namekey = self.fs.normalise_name(name)
+        self.populate_files()
+        return  namekey in self._files
 
     def invalidate(self):
         self._files = None
@@ -448,6 +511,38 @@ class FSDirectoryBase(object):
             # Any problems mean that we cannot delete
             return False
 
+    def can_rename(self, source_leafname, dest_leafname):
+        """
+        Overloadable: Check whether we can rename a given file within the directory
+
+        @return: True if the given leafname is renameable.
+        """
+        # Check the FS itself first
+        if not self.fs.can_rename():
+            return False
+        if not self.is_writeable():
+            return False
+
+        if dest_leafname and self.fs.normalise_name(source_leafname) == self.fs.normalise_name(dest_leafname):
+            # This is a no-op, so we'll allow it.
+            return True
+
+        # Now check if the file can be renamed
+        try:
+            # Check that the source file exists - will exception if not.
+            source_fsfile = self[source_leafname]
+
+            # Check that the destination file exists
+            if dest_leafname and dest_leafname in self:
+                return False
+
+            # If we passed those checks, we probably can rename.
+            return True
+
+        except Exception:
+            # Any problems mean that we cannot rename
+            return False
+
     def mkdir(self, leafname):
         """
         Create a directory with a given name.
@@ -467,3 +562,35 @@ class FSDirectoryBase(object):
         @param leafname: leafname of the directory to create.
         """
         raise FSWriteFailedError("Cannot create '{}' in '{}'".format(leafname, self.dirname))
+
+    def rename(self, source_leafname, dest_leafname):
+        """
+        Rename a given file within the directory
+
+        @param source_leafname: leafname to rename from
+        @param dest_leafname:   leafname to rename as
+        """
+        if self.fs.normalise_name(source_leafname) == self.fs.normalise_name(dest_leafname):
+            # This is a no-op.
+            return
+
+        if not self.is_writeable():
+            raise FSRenameFailedError("Directory '{}' is not writeable".format(self.dirname))
+
+        # Check that the source exists
+        source_fsfile = self[source_leafname]
+
+        if dest_leafname in self:
+            raise FSRenameFailedError("File '{}' already exists in '{}'".format(dest_leafname, self.dirname))
+
+        self.do_rename(source_leafname, dest_leafname)
+        self.invalidate()
+
+    def do_rename(self, source_leafname, dest_leafname):
+        """
+        Overloadable: Rename a given file within the directory
+
+        @param source_leafname: leafname to rename from
+        @param dest_leafname:   leafname to rename as
+        """
+        raise FSRenameFailedError("Cannot rename '{}' to '{}' in '{}'".format(source_leafname, dest_leafname, self.dirname))

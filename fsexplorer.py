@@ -138,6 +138,7 @@ class FSFileIcon(wx.Panel):
                               style=wx.ALIGN_CENTRE_HORIZONTAL | wx.BORDER_NONE | wx.BU_EXACTFIT)
         text_icon.SetMaxSize(self.text_size)
         text_icon.SetMinSize(self.text_size)
+        text_icon.SetForegroundColour((0, 0, 0))
         return text_icon
 
     def select(self, state=None):
@@ -217,6 +218,8 @@ class LeftAlignedIcons(object):
 
         else:
             (self.text_width, self.text_height) = text_icon.GetMaxSize()
+
+        text_icon.SetForegroundColour((0, 0, 0))
 
         self.text_icon = text_icon
         self.icons.append(self.text_icon)
@@ -450,6 +453,7 @@ class FSExplorerFrame(wx.Frame):
     default_sort_format = 'name'
     support_mkdir = True
     support_delete = True
+    support_rename = True
     support_refresh = True
 
     def __init__(self, fs, dirname, *args, **kwargs):
@@ -491,6 +495,7 @@ class FSExplorerFrame(wx.Frame):
         self.add_menu_display(self.menu_display)
         self.menu_selection = wx.Menu()
         self.menuitem_file_delete = None
+        self.menuitem_file_rename = None
         self.add_menu_file_selection(self.menu_selection)
 
         self.menu = wx.Menu()
@@ -600,13 +605,15 @@ class FSExplorerFrame(wx.Frame):
         self.add_menuitem(menu, 'Info', lambda event: self.OnSelectionInfo())
         if self.support_delete:
             self.menuitem_file_delete = self.add_menuitem(menu, 'Delete', lambda event: self.OnSelectionDelete())
+        if self.support_rename:
+            self.menuitem_file_rename = self.add_menuitem(menu, 'Rename...', lambda event: self.ShowRename())
 
     def add_menu_dirop(self, menu):
-        self.menuitem_openparent = self.add_menuitem(menu, 'Open parent', lambda event: self.OpenParentDirectory())
         if self.support_mkdir:
             self.menuitem_newdir = self.add_menuitem(menu, 'New directory...\tctrl-N', lambda event: self.ShowCreateDirectory())
         else:
             self.menuitem_newdir = None
+        self.menuitem_openparent = self.add_menuitem(menu, 'Open parent', lambda event: self.OpenParentDirectory())
         if self.support_refresh:
             self.add_menuitem(menu, 'Refresh directory\tctrl-R', lambda event: self.RefreshDirectory())
 
@@ -764,8 +771,14 @@ class FSExplorerFrame(wx.Frame):
     def Confirm(self, title, message, cancel_default=False):
         """
         Offer the user an OK/Cancel box to make a choice from.
+
+        @param title:       The dialogue title
+        @param messsage:    Message for the user
+        @param cancel_default:  True if the default operation should be to cancel.
+
+        @return: True if OK selected, False if CANCEL selected
         """
-        style = wx.OK | wx.Cancel | wx.ICON_QUESTION | wx.CENTRE
+        style = wx.OK | wx.CANCEL | wx.ICON_QUESTION | wx.CENTRE
         if cancel_default:
             style |= wx.CANCEL_DEFAULT
         error_frame = wx.MessageDialog(None,
@@ -791,6 +804,32 @@ class FSExplorerFrame(wx.Frame):
             self.RefreshDirectory()
         except Exception as exc:
             self.ReportError(title="Failed to create directory",
+                             message=str(exc))
+
+    def ShowRename(self):
+        fsfile = self.GetSelectedFiles()[0]
+        if self.debug:
+            print("Rename request for '{}'".format(fsfile))
+
+        leafname = wx.GetTextFromUser("Rename file:",
+                                      caption="New filename (within the current directory)",
+                                      default_value=fsfile.leafname,
+                                      parent=self, centre=True)
+
+        if not leafname:
+            # If they didn't give anything, just ignore as if they cancelled it.
+            return
+
+        dest_filename = self.fs.join(self.dirname, leafname)
+
+        if self.debug:
+            print("Rename from '{}' to '{}'".format(fsfile.filename, dest_filename))
+
+        try:
+            self.fs.rename(fsfile.filename, dest_filename)
+            self.RefreshDirectory()
+        except Exception as exc:
+            self.ReportError(title="Failed to rename",
                              message=str(exc))
 
     def ChangeDirectory(self, dirname):
@@ -836,6 +875,10 @@ class FSExplorerFrame(wx.Frame):
         selection = [fsicon for fsicon in self.panel.icons.values() if fsicon.selected]
         return selection
 
+    def GetSelectedFiles(self):
+        selection = [fsicon.fsfile for fsicon in self.panel.icons.values() if fsicon.selected]
+        return selection
+
     def on_file_menu(self, fsfile):
         if self.debug:
             print("Menu: %r" % (fsfile,))
@@ -845,14 +888,17 @@ class FSExplorerFrame(wx.Frame):
         if len(selection) == 0:
             # No files selected, so we need to grey out the selection menu
             self.menuitem_selection.Enable(False)
-            self.menuitem_selection.SetItemLabel("Selection")
+            self.menuitem_selection.SetItemLabel("File ''")
             self.menuitem_clearselection.Enable(False)
         else:
             self.menuitem_selection.Enable(True)
             if len(selection) == 1:
-                self.menuitem_selection.SetItemLabel("File '{}'".format(selection[0].fsfile.leafname))
+                label = 'File'
+                if selection[0].fsfile.isdir():
+                    label = 'Directory'
+                self.menuitem_selection.SetItemLabel("{} '{}'".format(label, selection[0].fsfile.leafname))
             else:
-                self.menuitem_selection.SetItemLabel("File ''")
+                self.menuitem_selection.SetItemLabel("Selection")
             self.menuitem_clearselection.Enable(True)
 
         # Display submenu ticking
@@ -873,17 +919,29 @@ class FSExplorerFrame(wx.Frame):
         if not self.support_delete or len(selection) == 0:
             can_delete = False
         else:
-            # We need to check all the files to see whether any are deletable.
+            # Check the filesystem first - if it says no, there's no point in going further
             if not self.fs.can_delete(None):
-                # Check the filesystem first - if it says no, there's no point in going further
                 can_delete = False
             else:
+                # We need to check all the files to see whether any are deletable.
                 for fsicon in selection:
                     if fsicon.fsfile.can_delete():
                         can_delete = True
                         break
         if self.menuitem_file_delete:
             self.menuitem_file_delete.Enable(can_delete)
+
+        # Can we rename?
+        can_rename = False
+        if not self.support_rename or len(selection) != 1:
+            can_rename = False
+        else:
+            selected_filename = selection[0].fsfile.filename
+            if self.fs.can_rename(selected_filename, None):
+                # This file is renameable so we can probably do this
+                can_rename = True
+        if self.menuitem_file_rename:
+            self.menuitem_file_rename.Enable(can_rename)
 
         # Only show the parent if there is one
         self.menuitem_openparent.Enable(bool(self.MenuHasOpenParent()))
@@ -980,7 +1038,15 @@ class FSExplorerFrame(wx.Frame):
         if self.debug:
             print("Delete: %r" % (fsfile,))
 
-        # FIXME: Add a confirmation for the delete
+        # FIXME: Configurable confirmation warning?
+        ok = self.Confirm("Confirm delete object",
+                          "Are you sure you want to delete '{}'?".format(fsfile.filename),
+                          cancel_default=True)
+
+        if not ok:
+            # Do not delete the file
+            return
+
         try:
             fsfile.delete()
             self.RefreshDirectory()
