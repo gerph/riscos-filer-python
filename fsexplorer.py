@@ -16,17 +16,21 @@ class SVGForFiletype(object):
     Singleton class which caches the icons for the files.
     """
     FILETYPE_DIRECTORY = 0x1000
+    FILETYPE_APPLICATION = 0x2000
     FILETYPE_LOADEXEC = -1
     resource_dir = os.path.dirname(__file__)
 
     def __init__(self):
         self.filetype_svg = {}
 
-    def get_svg(self, filetype):
+    def get_svg(self, filetype, leafname):
         svg = self.filetype_svg.get(filetype)
         if not svg:
             if filetype == self.FILETYPE_DIRECTORY:
                 filename = 'icons/directory.svg'
+            elif filetype == self.FILETYPE_APPLICATION:
+                # We could use the leafname here.
+                filename = 'icons/application.svg'
             elif filetype == self.FILETYPE_LOADEXEC:
                 filename = 'icons/file_lxa.svg'
             else:
@@ -122,8 +126,11 @@ class FSFileIcon(wx.Panel):
 
         filetype = self.fsfile.filetype()
         if self.fsfile.isdir():
-            filetype = svg_for_filetype.FILETYPE_DIRECTORY
-        svg = svg_for_filetype.get_svg(filetype)
+            if self.fsfile.leafname.startswith('!'):
+                filetype = svg_for_filetype.FILETYPE_APPLICATION
+            else:
+                filetype = svg_for_filetype.FILETYPE_DIRECTORY
+        svg = svg_for_filetype.get_svg(filetype, self.fsfile.leafname)
         aspect = float(svg.width) / svg.height
         actual_size = wx.Size(self.bitmap_size[1] * aspect, self.bitmap_size[1])
         bmp = svg.ConvertToScaledBitmap(actual_size)
