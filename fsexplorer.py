@@ -450,7 +450,7 @@ class FSExplorerFrame(wx.Frame):
     default_height = 480
     mouse_model_riscos = False
     default_display_format = 'large'
-    default_sort_format = 'name'
+    default_sort_order = 'name'
     support_mkdir = True
     support_delete = True
     support_rename = True
@@ -462,7 +462,7 @@ class FSExplorerFrame(wx.Frame):
         self.fsdir = self.fs.dir(dirname)
         self.explorers = kwargs.pop('explorers', None)
         self.display_format = kwargs.pop('display_format', self.default_display_format)
-        self.sort_format = kwargs.pop('sort_format', self.default_sort_format)
+        self.sort_order = kwargs.pop('sort_order', self.default_sort_order)
         self.panel = None
         self._title_text = None
         self._title_widget = None
@@ -586,10 +586,10 @@ class FSExplorerFrame(wx.Frame):
 
         menu.AppendSeparator()
 
-        self.menuitem_display_sortname = self.add_menuitem(menu, 'Sort by name', kind=wx.ITEM_CHECK, func=lambda event: self.SetSortFormat('name'))
-        self.menuitem_display_sortsize = self.add_menuitem(menu, 'Sort by size', kind=wx.ITEM_CHECK, func=lambda event: self.SetSortFormat('size'))
-        self.menuitem_display_sortfiletype = self.add_menuitem(menu, 'Sort by file type', kind=wx.ITEM_CHECK, func=lambda event: self.SetSortFormat('filetype'))
-        self.menuitem_display_sorttimestamp = self.add_menuitem(menu, 'Sort by date/time', kind=wx.ITEM_CHECK, func=lambda event: self.SetSortFormat('timestamp'))
+        self.menuitem_display_sortname = self.add_menuitem(menu, 'Sort by name', kind=wx.ITEM_CHECK, func=lambda event: self.SetSortOrder('name'))
+        self.menuitem_display_sortsize = self.add_menuitem(menu, 'Sort by size', kind=wx.ITEM_CHECK, func=lambda event: self.SetSortOrder('size'))
+        self.menuitem_display_sortfiletype = self.add_menuitem(menu, 'Sort by file type', kind=wx.ITEM_CHECK, func=lambda event: self.SetSortOrder('filetype'))
+        self.menuitem_display_sorttimestamp = self.add_menuitem(menu, 'Sort by date/time', kind=wx.ITEM_CHECK, func=lambda event: self.SetSortOrder('timestamp'))
 
     def add_menu_selection(self, menu):
         """
@@ -600,13 +600,29 @@ class FSExplorerFrame(wx.Frame):
 
     def add_menu_file_selection(self, menu):
         """
-        Add menu items related to a file selection
+        Add menu items related to a file selection.
+
+        The file menu in the original Filer looks like this:
+
+            Copy        ->
+            Rename      ->
+            Delete
+            Access      ->
+            Count
+            Help
+            Info        ->
+            Find
+            Set type    ->
+            Stamp
+            Share...
+
+        We only implement some of these, but we'll try to keep them in the same order.
         """
-        self.add_menuitem(menu, 'Info', lambda event: self.OnSelectionInfo())
-        if self.support_delete:
-            self.menuitem_file_delete = self.add_menuitem(menu, 'Delete', lambda event: self.OnSelectionDelete())
         if self.support_rename:
             self.menuitem_file_rename = self.add_menuitem(menu, 'Rename...', lambda event: self.ShowRename())
+        if self.support_delete:
+            self.menuitem_file_delete = self.add_menuitem(menu, 'Delete', lambda event: self.OnSelectionDelete())
+        self.add_menuitem(menu, 'Info', lambda event: self.OnSelectionInfo())
 
     def add_menu_dirop(self, menu):
         if self.support_mkdir:
@@ -679,28 +695,28 @@ class FSExplorerFrame(wx.Frame):
         text = self.GetFrameTitleText()
         self.SetTitle(text)
 
-    def GetSortedFiles(self, sort_format=None):
+    def GetSortedFiles(self, sort_order=None):
         """
         Return all the files in the directory, using the current or requested sort.
         """
 
-        if sort_format is None:
-            sort_format = self.sort_format
+        if sort_order is None:
+            sort_order = self.sort_order
 
         # FIXME: Invalid sort returns empty list to be clearly wrong. Maybe default to 'name'?
         files = []
         key_func = lambda f: f.leafname
 
-        if sort_format == 'name':
+        if sort_order == 'name':
             key_func = lambda f: self.fs.normalise_name(f.leafname)
 
-        elif sort_format == 'size':
+        elif sort_order == 'size':
             key_func = lambda f: 0 if f.isdir() else f.size()
 
-        elif sort_format == 'filetype':
+        elif sort_order == 'filetype':
             key_func = lambda f: -2 if f.isdir() else f.filetype()
 
-        elif sort_format == 'timestamp':
+        elif sort_order == 'timestamp':
             key_func = lambda f: f.epochtime()
 
         files = sorted(self.fsdir.files, key=key_func)
@@ -848,8 +864,8 @@ class FSExplorerFrame(wx.Frame):
         # The title text might be affected by the display format
         self.UpdateFrameTitleText()
 
-    def SetSortFormat(self, sort_format):
-        self.sort_format = sort_format
+    def SetSortOrder(self, sort_order):
+        self.sort_order = sort_order
         self.create_panel()
         # The title text might be affected by the display format
         self.UpdateFrameTitleText()
@@ -905,10 +921,10 @@ class FSExplorerFrame(wx.Frame):
         self.menuitem_display_large.Check(self.display_format == 'large')
         self.menuitem_display_small.Check(self.display_format == 'small')
         self.menuitem_display_fullinfo.Check(self.display_format == 'fullinfo')
-        self.menuitem_display_sortname.Check(self.sort_format == 'name')
-        self.menuitem_display_sortsize.Check(self.sort_format == 'size')
-        self.menuitem_display_sortfiletype.Check(self.sort_format == 'filetype')
-        self.menuitem_display_sorttimestamp.Check(self.sort_format == 'timestamp')
+        self.menuitem_display_sortname.Check(self.sort_order == 'name')
+        self.menuitem_display_sortsize.Check(self.sort_order == 'size')
+        self.menuitem_display_sortfiletype.Check(self.sort_order == 'filetype')
+        self.menuitem_display_sorttimestamp.Check(self.sort_order == 'timestamp')
 
         # New directory can only work if we can create a directory
         if self.menuitem_newdir:
@@ -999,7 +1015,7 @@ class FSExplorerFrame(wx.Frame):
             pos = self.GetNextFramePos()
         self.explorers.open_window(target, pos,
                                    display_format=self.display_format,
-                                   sort_format=self.sort_format)
+                                   sort_order=self.sort_order)
 
     def MenuHasOpenParent(self):
         target = self.fs.dirname(self.dirname)
@@ -1114,7 +1130,7 @@ class FSExplorers(object):
         filenamekey = self.fsfile_key(dirname)
         return self.open_windows.get(filenamekey, None)
 
-    def open_window(self, dirname, pos=None, display_format=None, sort_format=None):
+    def open_window(self, dirname, pos=None, display_format=None, sort_order=None):
         win = self.find_window(dirname)
         if win:
             win.Raise()
@@ -1124,7 +1140,7 @@ class FSExplorers(object):
                                           pos=pos,
                                           size=(self.default_width, self.default_height),
                                           display_format=display_format,
-                                          sort_format=sort_format)
+                                          sort_order=sort_order)
             win.Show(True)
 
         return win
