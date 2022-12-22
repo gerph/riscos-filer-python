@@ -1,6 +1,11 @@
 #!/usr/bin/env python
+"""
+Example application showing the behaviour of the filer interface.
+"""
 
+import argparse
 import os.path
+import sys
 
 import wx
 
@@ -9,12 +14,12 @@ import fsnative
 import fsexplorer
 
 
-show_inspector = False
+show_inspector = True
 
 
 class DemoFrame(wx.Frame):
     """ This window displays a button """
-    def __init__(self, title="Example of RISC OS Filer"):
+    def __init__(self, title="Example of RISC OS Filer", directory='~'):
         super(DemoFrame, self).__init__(None , -1, title)
 
         MenuBar = wx.MenuBar()
@@ -44,7 +49,7 @@ class DemoFrame(wx.Frame):
 
         self.Bind(wx.EVT_CLOSE, self.OnQuit)
 
-        self.fs = fsnative.FSNative(os.path.expanduser('~'))
+        self.fs = fsnative.FSNative(os.path.expanduser(directory))
         self.explorers = fsexplorer.FSExplorers(self.fs)
 
         win = fsexplorer.FSExplorerFrame(self.fs, '/', self, -1, size=(640, 480), explorers=self.explorers)
@@ -60,19 +65,39 @@ class DemoFrame(wx.Frame):
 
 class MyApp(wx.App):
     def __init__(self, *args, **kwargs):
+        self.options = kwargs.pop('options')
         super(MyApp, self).__init__(*args, **kwargs)
 
     def OnInit(self):
 
-        frame = DemoFrame()
+        frame = DemoFrame(directory=self.options.directory)
         frame.Show()
 
-        if show_inspector:
+        if self.options.inspector:
             import wx.lib.inspection
             wx.lib.inspection.InspectionTool().Show()
 
         return True
 
 
-app = MyApp(False)
-app.MainLoop()
+def setup_argparse():
+    parser = argparse.ArgumentParser(usage="%s [<options>] [<directory>]" % (os.path.basename(sys.argv[0]),))
+    parser.add_argument('--inspector', action='store_true', default=False,
+                        help="Displat the WxPython inspector")
+    parser.add_argument('directory', nargs='?', default='~',
+                        help="Directory to display")
+
+    return parser
+
+
+def main():
+    parser = setup_argparse()
+
+    options = parser.parse_args()
+
+    app = MyApp(options=options)
+    app.MainLoop()
+
+
+if __name__ == '__main__':
+    sys.exit(main())
