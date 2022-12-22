@@ -35,6 +35,9 @@ class FSFileInfoPanel(wx.Panel):
         # will be overridden in populate_info
         self.text_height = 8
 
+        self.scrollsize_x = wx.SystemSettings.GetMetric(wx.SYS_VSCROLL_X)
+        self.scrollsize_y = wx.SystemSettings.GetMetric(wx.SYS_HSCROLL_Y)
+
         self.populate_info()
 
         self.sizer = wx.BoxSizer(wx.VERTICAL)
@@ -100,6 +103,7 @@ class FSFileInfoFrame(wx.Frame):
 
     # Allow more space for the title text (eg for the buttons in the title)
     title_extra_size = 80
+    frame_border = 3
 
     def __init__(self, parent, fsfile, *args, **kwargs):
         self.parent = parent
@@ -116,12 +120,17 @@ class FSFileInfoFrame(wx.Frame):
         # Allow for the size of the title
         dc = wx.ScreenDC()
         title_size = dc.GetTextExtent(kwargs['title'])
-        size = wx.Size(max(title_size[0] + self.title_extra_size, size[0]), size[1])
+        size = wx.Size(max(title_size[0] + self.title_extra_size, size[0] + self.frame_border),
+                       size[1] + self.frame_border)
 
         #print("title = %r, best_size = %r" % (title_size, size))
 
         self.SetMaxClientSize(size)
         self.SetClientSize(size)
+
+        self.sizer = wx.BoxSizer(wx.VERTICAL)
+        self.sizer.Add(self.panel, 1, wx.EXPAND | wx.ALL, 0)
+        self.SetSizer(self.sizer)
 
         self.Bind(wx.EVT_CLOSE, self.on_close)
         if self.explorers:
