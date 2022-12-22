@@ -2,6 +2,8 @@
 Interfaces for file information windows.
 """
 
+import sys
+
 import wx
 
 
@@ -104,6 +106,8 @@ class FSFileInfoFrame(wx.Frame):
     # Allow more space for the title text (eg for the buttons in the title)
     title_extra_size = 80
     frame_border = 3
+    if sys.platform == 'win32':
+        frame_border += 6
 
     def __init__(self, parent, fsfile, *args, **kwargs):
         self.parent = parent
