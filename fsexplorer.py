@@ -142,7 +142,7 @@ class FSFileIcon(wx.Panel):
 
     def GetTextIcon(self):
         text_icon = wx.Button(self, -1, label=self.fsfile.leafname,
-                              style=wx.ALIGN_CENTRE_HORIZONTAL | wx.BORDER_NONE | wx.BU_EXACTFIT)
+                              style=wx.BORDER_NONE | wx.BU_EXACTFIT)
         text_icon.SetMaxSize(self.text_size)
         text_icon.SetMinSize(self.text_size)
         text_icon.SetForegroundColour((0, 0, 0))
@@ -400,6 +400,7 @@ class FSExplorerPanel(scrolled.ScrolledPanel):
 
         kwargs['style'] = wx.VSCROLL
         super(FSExplorerPanel, self).__init__(parent, *args, **kwargs)
+        self.SetBackgroundColour('#ededed')
         self.SetupScrolling(scroll_x=False)
         self.Bind(wx.EVT_SIZE, self.on_size)
 
@@ -459,6 +460,7 @@ class FSExplorerPanel(scrolled.ScrolledPanel):
             title = self.parent.GetTitleText()
             if title:
                 self._title_widget = wx.StaticText(self, -1, title)
+                self._title_widget.SetForegroundColour((0, 0, 0))
                 self._title_widget.SetFont(wx.Font(28, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
                 sln = wx.StaticLine(self)
                 region = wx.BoxSizer(wx.VERTICAL)
