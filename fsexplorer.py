@@ -111,7 +111,7 @@ class FSFileIcon(wx.Panel):
     def GetIconSize(self):
         width = max(self.text_size[0], self.bitmap_size[0])
         height = self.text_size[1] + self.inner_spacing + self.bitmap_size[1]
-        return wx.Size(width, height)
+        return wx.Size(int(width), int(height))
 
     def GetTextSize(self):
         return wx.Size(self.requested_text_width, self.max_text_height)
@@ -119,7 +119,7 @@ class FSFileIcon(wx.Panel):
     def GetSpriteSize(self):
         bitmap_width = self.requested_text_width
         bitmap_height = self.requested_icon_height - self.inner_spacing - self.text_size[1]
-        return wx.Size(bitmap_width, bitmap_height)
+        return wx.Size(int(bitmap_width), int(bitmap_height))
 
     def GetSpriteIcon(self):
         sprite_icon = wx.BitmapButton(self, -1, style=wx.BORDER_NONE | wx.BU_EXACTFIT | wx.BU_NOTEXT)
@@ -132,7 +132,7 @@ class FSFileIcon(wx.Panel):
                 filetype = svg_for_filetype.FILETYPE_DIRECTORY
         svg = svg_for_filetype.get_svg(filetype, self.fsfile.leafname)
         aspect = float(svg.width) / svg.height
-        actual_size = wx.Size(self.bitmap_size[1] * aspect, self.bitmap_size[1])
+        actual_size = wx.Size(int(self.bitmap_size[1] * aspect), int(self.bitmap_size[1]))
         bmp = svg.ConvertToScaledBitmap(actual_size)
 
         sprite_icon.SetBitmap(bmp)
@@ -236,7 +236,7 @@ class LeftAlignedIcons(object):
         padding_width = total_width - self.text_width
         if padding_width > 0:
             padding = wx.Button(self.parent, -1, label='',
-                                size=wx.Size(padding_width, self.text_height),
+                                size=wx.Size(int(padding_width), int(self.text_height)),
                                 style=wx.BU_LEFT | wx.ALIGN_LEFT | wx.BORDER_NONE | wx.BU_EXACTFIT)
             self.hsizer.Add(padding, 0, wx.EXPAND | wx.ALL)
             self.icons.append(padding)
@@ -279,7 +279,7 @@ class FSFileSmallIcon(FSFileIcon):
         return wx.Size(width, height)
 
     def GetSpriteSize(self):
-        return wx.Size(self.requested_icon_height, self.requested_icon_height)
+        return wx.Size(int(self.requested_icon_height), int(self.requested_icon_height))
 
     def GetTextSize(self):
         dc = wx.ScreenDC()
@@ -346,7 +346,7 @@ class FSFileFullInfoIcon(FSFileSmallIcon):
         width += self.inner_spacing + self.GetFiletypeSize()[0]
         width += self.inner_spacing + self.GetTimestampSize()[0]
         height = max(self.text_size[1], self.bitmap_size[1])
-        return wx.Size(width, height)
+        return wx.Size(int(width), int(height))
 
     def GetButtonIcons(self):
         icons = [self.sprite_icon]

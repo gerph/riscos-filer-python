@@ -7,6 +7,13 @@ import functools
 import os
 
 
+try:
+    unicode
+except NameError:
+    # Python 3
+    unicode = str
+
+
 class FSError(Exception):
     pass
 

@@ -51,8 +51,8 @@ class FSFileInfoPanel(wx.Panel):
         if False:
             width = self.list.GetColumnWidth(0) + self.inner_spacing + self.list.GetColumnWidth(1)
             height = (self.list.GetUserLineHeight() + 1) * self.list.GetItemCount()
-            return wx.Size(width + self.outer_border * 2,
-                           height + self.outer_border * 2)
+            return wx.Size(int(width + self.outer_border * 2),
+                           int(height + self.outer_border * 2))
         else:
             # The bottom item
             rect = self.list.GetItemRect(self.list.GetItemCount() - 1)
@@ -60,8 +60,8 @@ class FSFileInfoPanel(wx.Panel):
             width = rect.Width + self.inner_spacing
             height = (rect.Height + self.inner_spacing) * self.list.GetItemCount()
 
-            return wx.Size(width + self.outer_border * 2,
-                           height + self.outer_border * 2)
+            return wx.Size(int(width + self.outer_border * 2),
+                           int(height + self.outer_border * 2))
 
     def SetBackgroundColour(self, colour):
         super(FSFileInfoPanel, self).SetBackgroundColour(colour)
@@ -124,8 +124,8 @@ class FSFileInfoFrame(wx.Frame):
         # Allow for the size of the title
         dc = wx.ScreenDC()
         title_size = dc.GetTextExtent(kwargs['title'])
-        size = wx.Size(max(title_size[0] + self.title_extra_size, size[0] + self.frame_border),
-                       size[1] + self.frame_border)
+        size = wx.Size(int(max(title_size[0] + self.title_extra_size, size[0] + self.frame_border)),
+                       int(size[1] + self.frame_border))
 
         #print("title = %r, best_size = %r" % (title_size, size))
 
