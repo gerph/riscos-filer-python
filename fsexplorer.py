@@ -276,7 +276,7 @@ class FSFileSmallIcon(FSFileIcon):
     def GetIconSize(self):
         width = self.requested_text_width + self.inner_spacing + self.bitmap_size[0]
         height = max(self.text_size[1], self.bitmap_size[1])
-        return wx.Size(width, height)
+        return wx.Size(int(width), int(height))
 
     def GetSpriteSize(self):
         return wx.Size(int(self.requested_icon_height), int(self.requested_icon_height))
@@ -541,7 +541,7 @@ class FSExplorerFrame(wx.Frame):
 
         @param event:   The event to process
 
-        @return: button name, in RISC OS terms, preceeded by 'D-' for double click
+        @return: button name, in RISC OS terms, preceded by 'D-' for double click
         """
         double = event.LeftDClick() or event.RightDClick()
         button = 'NONE'
@@ -828,7 +828,7 @@ class FSExplorerFrame(wx.Frame):
         Offer the user an OK/Cancel box to make a choice from.
 
         @param title:       The dialogue title
-        @param messsage:    Message for the user
+        @param message:     Message for the user
         @param cancel_default:  True if the default operation should be to cancel.
 
         @return: True if OK selected, False if CANCEL selected
@@ -1009,8 +1009,8 @@ class FSExplorerFrame(wx.Frame):
         """
         # We would like frames to appear in different positions when they're opened
         # as part of a sequence.
-        counterx = (counter % 8) + ((counter / 8) % 6)
-        countery = (counter % 8) + (((counter / 8) % 6) / 2.0)
+        counterx = (counter % 8) + ((counter // 8) % 6)
+        countery = (counter % 8) + (((counter // 8) % 6) / 2.0)
 
         pos = self.GetPosition()
         pos = (pos.x + int(self.open_offset_x * (counterx + 1)),

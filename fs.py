@@ -7,11 +7,6 @@ import functools
 import os
 
 
-try:
-    unicode
-except NameError:
-    # Python 3
-    unicode = str
 
 
 class FSError(Exception):
@@ -275,12 +270,12 @@ class FSFileBase(object):
         return "<{}({!r})>".format(self.__class__.__name__, self.filename)
 
     def __eq__(self, other):
-        if isinstance(other, (str, unicode)):
+        if isinstance(other, str):
             return self.leafname == other
         return self.leafname == other.leafname
 
     def __lt__(self, other):
-        if isinstance(other, (str, unicode)):
+        if isinstance(other, str):
             return self.leafname < other
         return self.leafname < other.leafname
 
@@ -361,7 +356,7 @@ class FSFileBase(object):
 
         self.do_delete()
         # FIXME: Mark this object as invalid too?
-        self.dir().invalidate()
+        self.parent().invalidate()
 
     def do_delete(self):
         """
@@ -391,7 +386,7 @@ class FSFileBase(object):
         epochtime = self.epochtime()
         if epochtime is None:
             return "Unknown"
-        dt = datetime.datetime.utcfromtimestamp(epochtime)
+        dt = datetime.datetime.fromtimestamp(epochtime, tz=datetime.timezone.utc)
         return dt.strftime('%H:%M:%S.X %d %b %Y').replace('X', '{:02}'.format(dt.microsecond / 10000))
 
 
@@ -436,7 +431,7 @@ class FSDirectoryBase(object):
                                                                             self.dirname))
             return fsfile
 
-        elif isinstance(name_or_index, (str, unicode)):
+        elif isinstance(name_or_index, str):
 
             namekey = self.fs.normalise_name(name_or_index)
             self.populate_files()
@@ -483,7 +478,7 @@ class FSDirectoryBase(object):
         """
         Overloadable: Check whether we can write to this directory.
 
-        @return: True if the files in this folder are modifyable, False if we not.
+        @return: True if the files in this folder are modifiable, False if we not.
         """
         return False
 
