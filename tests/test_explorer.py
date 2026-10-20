@@ -6,6 +6,7 @@ No toolkit is needed.
 """
 
 import os
+import subprocess
 import sys
 import unittest
 
@@ -524,6 +525,36 @@ class OperationTests(unittest.TestCase):
         self.assertIn('Mango', names(model.files))
 
 
+class IconTests(unittest.TestCase):
+
+    def test_the_icon_is_chosen_by_the_type_of_the_file(self):
+        (model, _) = make_model()
+        self.assertEqual(explorer.icon_filetype(model.file('Mango')), 0xFFD)
+        self.assertEqual(explorer.icon_filetype(model.file('Docs')), explorer.FILETYPE_DIRECTORY)
+
+    def test_a_directory_with_a_pling_is_an_application(self):
+        memfs = MemFS()
+        memfs.add('$.!Run', dir=True)
+        (model, _) = make_model(memfs)
+        self.assertEqual(explorer.icon_filetype(model.file('!Run')), explorer.FILETYPE_APPLICATION)
+
+    def test_the_names_of_the_icons(self):
+        self.assertEqual(explorer.icon_filename(explorer.FILETYPE_DIRECTORY), 'directory.svg')
+        self.assertEqual(explorer.icon_filename(explorer.FILETYPE_APPLICATION), 'application.svg')
+        self.assertEqual(explorer.icon_filename(explorer.FILETYPE_LOADEXEC), 'file_lxa.svg')
+        self.assertEqual(explorer.icon_filename(0xFFD), 'file_ffd.svg')
+        self.assertEqual(explorer.icon_filename(0x5), 'file_005.svg')
+
+    def test_the_file_information(self):
+        (model, _) = make_model()
+        fields = explorer.file_info_fields(model.file('Mango'))
+        self.assertEqual([name for (name, value) in fields], ['Leafname', 'File type', 'Size', 'Date/time'])
+        self.assertEqual(fields[0][1], 'Mango')
+        self.assertEqual(fields[1][1], '&FFD')
+        self.assertEqual(fields[2][1], '200 bytes')
+        self.assertEqual(explorer.file_info_fields(model.file('Docs'))[1][1], 'Directory')
+
+
 class CascadeTests(unittest.TestCase):
 
     def test_successive_windows_step_down_and_across(self):
@@ -541,8 +572,12 @@ class CascadeTests(unittest.TestCase):
 class IndependenceTests(unittest.TestCase):
 
     def test_the_model_needs_no_toolkit(self):
-        for name in ('wx', 'gi'):
-            self.assertNotIn(name, sys.modules)
+        # In an interpreter of its own, as other tests may have imported a toolkit
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        code = ("import sys; sys.path.insert(0, %r); import explorer, explorers, iconlayout; "
+                "print(sorted(name for name in ('wx', 'gi', 'unicorn') if name in sys.modules))" % (root,))
+        output = subprocess.check_output([sys.executable, '-c', code]).decode().strip()
+        self.assertEqual(output, '[]')
 
 
 if __name__ == '__main__':

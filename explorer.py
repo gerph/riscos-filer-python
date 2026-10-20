@@ -74,6 +74,56 @@ def cascade_offset(counter=0, offset_x=16, offset_y=32):
     return (int(offset_x * (counterx + 1)), int(offset_y * (countery + 1)))
 
 
+# The file types that the icons are chosen by, for things that are not files with a type of their own
+FILETYPE_DIRECTORY = 0x1000
+FILETYPE_APPLICATION = 0x2000
+FILETYPE_LOADEXEC = -1
+
+
+def icon_filetype(fsfile):
+    """
+    The file type which an icon is chosen by.
+
+    A directory is a directory or, if its name starts with '!', an application.
+    """
+    if fsfile.isdir():
+        if fsfile.leafname.startswith('!'):
+            return FILETYPE_APPLICATION
+        return FILETYPE_DIRECTORY
+    return fsfile.filetype()
+
+
+def icon_filename(filetype):
+    """
+    The name of the SVG icon for a file type, within the `icons` directory of the repository.
+
+    The caller falls back to `file_xxx.svg` if there is no file of that name.
+
+    @param filetype:    File type from `icon_filetype()`
+    """
+    if filetype == FILETYPE_DIRECTORY:
+        return 'directory.svg'
+    if filetype == FILETYPE_APPLICATION:
+        return 'application.svg'
+    if filetype == FILETYPE_LOADEXEC:
+        return 'file_lxa.svg'
+    return 'file_{:03x}.svg'.format(filetype)
+
+
+def file_info_fields(fsfile):
+    """
+    What the file information window shows.
+
+    @return: List of (property, value) tuples, as text
+    """
+    return [
+        ('Leafname', fsfile.leafname),
+        ('File type', fsfile.format_filetype()),
+        ('Size', fsfile.format_size()),
+        ('Date/time', fsfile.format_timestamp()),
+    ]
+
+
 class FSExplorerModel(object):
     """
     The state of one explorer window, and the operations on it.

@@ -387,7 +387,7 @@ class FSFileBase(object):
         if epochtime is None:
             return "Unknown"
         dt = datetime.datetime.fromtimestamp(epochtime, tz=datetime.timezone.utc)
-        return dt.strftime('%H:%M:%S.X %d %b %Y').replace('X', '{:02}'.format(dt.microsecond / 10000))
+        return dt.strftime('%H:%M:%S.X %d %b %Y').replace('X', '{:02}'.format(dt.microsecond // 10000))
 
 
 class FSDirectoryBase(object):
