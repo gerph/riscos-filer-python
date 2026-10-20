@@ -42,7 +42,9 @@ does nothing in the default implementation.
 
 An `FSExplorers` object may be passed to the `FSExplorerFrame` on creation, to
 track the existing explorer windows that have been opened. This allows them to be
-raised if they are re-opened whilst they are open.
+raised if they are re-opened whilst they are open. The tracking does not depend on a
+toolkit (`explorers.FSExplorersBase`): a window provides `show_window()`,
+`raise_window()` and `close_window()`, and the toolkit's subclass makes the windows.
 
 The `explorer` module contains `FSExplorerModel`, which is everything about an explorer
 window that does not depend on a toolkit: the directory and its files in the display order,

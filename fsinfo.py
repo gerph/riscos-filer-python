@@ -140,6 +140,17 @@ class FSFileInfoFrame(wx.Frame):
         if self.explorers:
             self.explorers.fileinfo_has_opened(self.fsfile.filename, self)
 
+    # The window protocol, which the registry of windows (explorers.FSExplorersBase) uses.
+
+    def show_window(self):
+        self.Show()
+
+    def raise_window(self):
+        self.Raise()
+
+    def close_window(self):
+        self.Close()
+
     def on_close(self, event):
         if self.explorers:
             self.explorers.fileinfo_has_closed(self.fsfile.filename)

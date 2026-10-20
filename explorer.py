@@ -132,7 +132,10 @@ class FSExplorerModel(object):
         self.stale = False
         self.error = None
         self._selection = set()
-        self.files = self._sorted(self.fsdir.files)
+        # The files as the directory lists them, from which they are sorted: files which are equal
+        # in the sort order stay in the order of the listing, however the sort order was reached.
+        self._listing = list(self.fsdir.files)
+        self.files = self._sorted(self._listing)
 
     # --- Titles
 
@@ -184,17 +187,18 @@ class FSExplorerModel(object):
         self.fsdir.invalidate()
         was_stale = self.stale
         try:
-            files = self._sorted(self.fsdir.files)
+            listing = list(self.fsdir.files)
         except Exception as exc:
             self.stale = True
             self.error = str(exc)
             self.report_error("Failed to read directory", self.error)
             return not was_stale
 
-        self.files = files
+        self._listing = listing
+        self.files = self._sorted(listing)
         self.stale = False
         self.error = None
-        self._selection &= set(fsfile.leafname for fsfile in files)
+        self._selection &= set(fsfile.leafname for fsfile in listing)
         return True
 
     def change_directory(self, dirname):
@@ -208,14 +212,15 @@ class FSExplorerModel(object):
         """
         try:
             fsdir = self.fs.dir(dirname)
-            files = self._sorted(fsdir.files)
+            listing = list(fsdir.files)
         except Exception as exc:
             self.report_error("Failed to read directory", str(exc))
             return False
 
         self.dirname = dirname
         self.fsdir = fsdir
-        self.files = files
+        self._listing = listing
+        self.files = self._sorted(listing)
         self.stale = False
         self.error = None
         self._selection = set()
@@ -239,7 +244,7 @@ class FSExplorerModel(object):
         if sort_order == self.sort_order:
             return False
         self.sort_order = sort_order
-        self.files = self._sorted(self.files)
+        self.files = self._sorted(self._listing)
         return True
 
     def parent_dirname(self):

@@ -167,6 +167,16 @@ class ListingTests(unittest.TestCase):
         (model, _) = make_model(sort_order='nonsense')
         self.assertEqual(names(model.files), ['Docs', 'Locked', 'Mango', 'Zebra', 'apple'])
 
+    def test_files_equal_in_the_sort_order_do_not_depend_on_the_order_before(self):
+        # 'a' and 'b' are the same type, but 'b' is the smaller
+        memfs = MemFS()
+        memfs.add('$.a', size=20)
+        memfs.add('$.b', size=10)
+        (model, _) = make_model(memfs, sort_order='size')
+        self.assertEqual(names(model.files), ['b', 'a'])
+        model.set_sort_order('filetype')
+        self.assertEqual(names(model.files), ['a', 'b'])
+
     def test_the_defaults(self):
         (model, _) = make_model()
         self.assertEqual((model.display_format, model.sort_order), ('large', 'name'))

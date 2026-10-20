@@ -8,6 +8,8 @@ import wx
 from wx.svg import SVGimage
 import wx.lib.scrolledpanel as scrolled
 
+import explorer
+from explorers import FSExplorersBase
 from fsinfo import FSFileInfoFrame
 
 
@@ -148,11 +150,11 @@ class FSFileIcon(wx.Panel):
         text_icon.SetForegroundColour((0, 0, 0))
         return text_icon
 
-    def select(self, state=None):
-        if state is None:
-            state = not self.selected
-        else:
-            state = bool(state)
+    def show_selected(self, state):
+        """
+        Show the icon as selected or not. The selection itself is held by the frame's model.
+        """
+        state = bool(state)
         if self.selected != state:
             self.selected = state
 
@@ -176,10 +178,11 @@ class FSFileIcon(wx.Panel):
         if self.frame.debug:
             print("File Click: Button=%r" % (button,))
 
+        leafname = self.fsfile.leafname
         if button == 'D-SELECT':
             # Run object
             # (deselect item first)
-            self.select(False)
+            self.frame.SelectFile(leafname, False)
             self.frame.OnFileActivate(self.fsfile, close=False)
 
         elif button == 'D-ADJUST':
@@ -188,15 +191,15 @@ class FSFileIcon(wx.Panel):
 
         elif button == 'SELECT':
             self.frame.DeselectAll()
-            self.select()
+            self.frame.SelectFile(leafname, True)
 
         elif button == 'ADJUST':
-            self.select()
+            self.frame.SelectFile(leafname, None)
 
         elif button == 'MENU':
-            if not self.selected:
+            if not self.frame.model.is_selected(leafname):
                 self.frame.DeselectAll()
-                self.select()
+                self.frame.SelectFile(leafname, True)
             self.frame.on_file_menu(self.fsfile)
 
 
@@ -487,20 +490,30 @@ class FSExplorerFrame(wx.Frame):
 
     def __init__(self, fs, dirname, *args, **kwargs):
         self.fs = fs
-        self.dirname = dirname
-        self.fsdir = self.fs.dir(dirname)
         self.explorers = kwargs.pop('explorers', None)
-        self.display_format = kwargs.pop('display_format', self.default_display_format)
-        self.sort_order = kwargs.pop('sort_order', self.default_sort_order)
         self.panel = None
         self._title_text = None
         self._title_widget = None
         self._frametitle_text = None
         self.debug = False
-        self.files = []
 
         self.shift_down = False
         self.control_down = False
+
+        # The model holds what the window shows. It raises if the directory cannot be read, before
+        # any window has been made.
+        self.model = explorer.FSExplorerModel(
+                fs, dirname,
+                display_format=kwargs.pop('display_format', None) or self.default_display_format,
+                sort_order=kwargs.pop('sort_order', None) or self.default_sort_order,
+                mouse_model_riscos=self.mouse_model_riscos,
+                support_mkdir=self.support_mkdir,
+                support_delete=self.support_delete,
+                support_rename=self.support_rename,
+                support_refresh=self.support_refresh,
+                report_error=lambda title, message: self.ReportError(title, message),
+                confirm=lambda title, message, cancel_default=False: self.Confirm(title, message,
+                                                                                  cancel_default=cancel_default))
 
         kwargs['title'] = self.GetFrameTitleText()
         if 'size' not in kwargs:
@@ -535,6 +548,37 @@ class FSExplorerFrame(wx.Frame):
         self.menuitem_openparent = None
         self.add_menu_dirop(self.menu)
 
+    @property
+    def dirname(self):
+        return self.model.dirname
+
+    @property
+    def fsdir(self):
+        return self.model.fsdir
+
+    @property
+    def files(self):
+        return self.model.files
+
+    @property
+    def display_format(self):
+        return self.model.display_format
+
+    @property
+    def sort_order(self):
+        return self.model.sort_order
+
+    # The window protocol, which the registry of windows (FSExplorersBase) uses.
+
+    def show_window(self):
+        self.Show(True)
+
+    def raise_window(self):
+        self.Raise()
+
+    def close_window(self):
+        self.Close()
+
     def click_event_to_button(self, event):
         """
         Convert from a click event to an action that we can perform.
@@ -544,38 +588,23 @@ class FSExplorerFrame(wx.Frame):
         @return: button name, in RISC OS terms, preceded by 'D-' for double click
         """
         double = event.LeftDClick() or event.RightDClick()
-        button = 'NONE'
+        button = None
         if double:
             if event.LeftDClick():
-                button = 'SELECT'
+                button = 'left'
             elif event.RightDClick():
-                button = 'ADJUST'
+                button = 'right'
         else:
             if event.LeftDown():
-                button = 'SELECT'
+                button = 'left'
             elif event.RightDown():
-                button = 'ADJUST'
+                button = 'right'
             elif event.MiddleDown():
-                button = 'MENU'
+                button = 'middle'
 
-        # Now let's transform these if we're use the non-RISC OS mouse model
-        if not self.mouse_model_riscos:
-            # The non-RISC OS mouse model is:
-            #   ctrl+left toggles items
-            #   right opens menu
-            if button == 'ADJUST':
-                # Right button means Menu
-                button = 'MENU'
-
-            elif button == 'SELECT' and self.control_down:
-                # If they had control down, we change this to the Adjust button (1)
-                button = 'ADJUST'
-
-        if button != 'NONE':
-            if double:
-                button = 'D-' + button
-
-        return button
+        # The model takes the click as a RISC OS button, with either mouse model
+        self.model.mouse_model_riscos = self.mouse_model_riscos
+        return self.model.click_to_button(button, double=double, control=self.control_down)
 
     def on_click(self, event):
         # Ensure that we get focus when we do this (and raise as otherwise we don't get keys)
@@ -695,9 +724,8 @@ class FSExplorerFrame(wx.Frame):
 
         elif keycode == ord('N') and self.control_down:
             # ctrl-N
-            if self.support_mkdir:
-                if self.fsdir.can_mkdir():
-                    self.ShowCreateDirectory()
+            if self.model.capabilities().mkdir_enabled:
+                self.ShowCreateDirectory()
 
         event.Skip()
 
@@ -714,7 +742,7 @@ class FSExplorerFrame(wx.Frame):
     def GetTitleText(self):
         if self._title_text:
             return self._title_text
-        return "Directory: {}".format(self.dirname)
+        return self.model.title()
 
     def SetTitleText(self, title):
         if self._title_widget:
@@ -722,9 +750,11 @@ class FSExplorerFrame(wx.Frame):
             self._title_widget.SetLabel(title)
 
     def GetFrameTitleText(self):
-        if self._frametitle_text:
-            return self._frametitle_text
-        return self.GetTitleText()
+        text = self._frametitle_text or self.GetTitleText()
+        if self.model.stale:
+            # The directory could not be read when it was last refreshed, so what is shown is old
+            text += " (not available)"
+        return text
 
     def SetFrameTitleText(self, text):
         self._frametitle_text = text
@@ -734,55 +764,20 @@ class FSExplorerFrame(wx.Frame):
         text = self.GetFrameTitleText()
         self.SetTitle(text)
 
-    def GetSortedFiles(self, sort_order=None):
+    def create_panel(self):
         """
-        Return all the files in the directory, using the current or requested sort.
+        Make the panel of icons from the model, replacing any there was.
         """
-
-        if sort_order is None:
-            sort_order = self.sort_order
-
-        # FIXME: Invalid sort returns empty list to be clearly wrong. Maybe default to 'name'?
-        files = []
-        key_func = lambda f: f.leafname
-
-        if sort_order == 'name':
-            key_func = lambda f: self.fs.normalise_name(f.leafname)
-
-        elif sort_order == 'size':
-            key_func = lambda f: 0 if f.isdir() else f.size()
-
-        elif sort_order == 'filetype':
-            key_func = lambda f: -2 if f.isdir() else f.filetype()
-
-        elif sort_order == 'timestamp':
-            key_func = lambda f: f.epochtime()
-
-        files = sorted(self.fsdir.files, key=key_func)
-
-        return files
-
-    def create_panel(self, keep_selection=True):
-        last_selection = set()
         if self.panel:
-            # Construct a list of the last selected icons in the panel
-            if keep_selection:
-                for fsicon in self.panel.icons.values():
-                    if fsicon.selected:
-                        last_selection.add(fsicon.fsfile.leafname)
-
             self.panel.Destroy()
             self.panel = None
-
-        self.files = self.GetSortedFiles()
 
         # Make a title area and sizer for the upper part of the panel
         self.panel = FSExplorerPanel(self, display_format=self.display_format)
         self.Layout()
 
-        # Now re-select the old selection
-        for leafname in last_selection:
-            self.SelectFile(leafname)
+        # The selection is held by the model, and the new icons show it
+        self.show_selection()
 
         # We track keys so that the right events can be delivered for running
         # or opening files with control keys pressed.
@@ -801,10 +796,20 @@ class FSExplorerFrame(wx.Frame):
             self.explorers.window_has_closed(self.dirname)
             self.explorers.window_has_opened(self.dirname, self)
 
-    def RefreshDirectory(self):
-        self.fs.invalidate_dir(self.dirname)
-        self.fsdir.invalidate()
+    def redraw(self):
+        """
+        Draw the window again from the model.
+        """
         self.create_panel()
+        self.UpdateFrameTitleText()
+
+    def RefreshDirectory(self):
+        """
+        Read the directory again. If it cannot be read, that is reported and the window keeps the
+        files that it had.
+        """
+        if self.model.refresh():
+            self.redraw()
 
     def on_close(self, event):
         if self.explorers:
@@ -854,12 +859,8 @@ class FSExplorerFrame(wx.Frame):
             # If they didn't give anything, just ignore as if they cancelled it.
             return
 
-        try:
-            self.fsdir.mkdir(leafname)
-            self.RefreshDirectory()
-        except Exception as exc:
-            self.ReportError(title="Failed to create directory",
-                             message=str(exc))
+        if self.model.mkdir(leafname):
+            self.redraw()
 
     def ShowRename(self):
         fsfile = self.GetSelectedFiles()[0]
@@ -875,86 +876,80 @@ class FSExplorerFrame(wx.Frame):
             # If they didn't give anything, just ignore as if they cancelled it.
             return
 
-        dest_filename = self.fs.join(self.dirname, leafname)
-
         if self.debug:
-            print("Rename from '{}' to '{}'".format(fsfile.filename, dest_filename))
+            print("Rename from '{}' to '{}'".format(fsfile.leafname, leafname))
 
-        try:
-            self.fs.rename(fsfile.filename, dest_filename)
-            self.RefreshDirectory()
-        except Exception as exc:
-            self.ReportError(title="Failed to rename",
-                             message=str(exc))
+        if self.model.rename(fsfile.leafname, leafname):
+            self.redraw()
 
     def ChangeDirectory(self, dirname):
-        if self.panel:
-            if self.explorers:
-                self.explorers.window_has_closed(self.dirname)
+        """
+        Show another directory in this window. If it cannot be read, that is reported and the window
+        keeps showing the directory that it had.
 
-        self.dirname = dirname
-        self.fsdir = self.fs.dir(dirname)
-        self.create_panel(keep_selection=False)
-        self.UpdateFrameTitleText()
+        @return: True if the directory was changed
+        """
+        old_dirname = self.dirname
+        if not self.model.change_directory(dirname):
+            return False
+        if self.explorers:
+            self.explorers.window_has_closed(old_dirname)
+        self.redraw()
+        return True
 
     def SetDisplayFormat(self, display_format):
-        self.display_format = display_format
-        self.create_panel()
-        # The title text might be affected by the display format
-        self.UpdateFrameTitleText()
+        if self.model.set_display_format(display_format):
+            self.redraw()
 
     def SetSortOrder(self, sort_order):
-        self.sort_order = sort_order
-        self.create_panel()
-        # The title text might be affected by the display format
-        self.UpdateFrameTitleText()
+        if self.model.set_sort_order(sort_order):
+            self.redraw()
+
+    def show_selection(self):
+        """
+        Make the icons show the selection that the model holds.
+        """
+        if self.panel:
+            for (leafname, fsicon) in self.panel.icons.items():
+                fsicon.show_selected(self.model.is_selected(leafname))
 
     def SelectFile(self, leafname, state=True):
-        fsicon = self.panel.icons.get(leafname, None)
-        if fsicon:
-            fsicon.select(state)
+        """
+        @param state:   True to select, False to deselect, None to toggle
+        """
+        if self.model.select(leafname, state):
+            self.show_selection()
 
     def SelectAll(self, state=True):
-        for fsicon in self.panel.icons.values():
-            fsicon.select(state)
+        if state:
+            self.model.select_all()
+        else:
+            self.model.deselect_all()
+        self.show_selection()
 
     def DeselectAll(self):
         self.SelectAll(state=False)
 
     def ApplySelectedFiles(self, func):
-        for fsicon in self.panel.icons.values():
-            if fsicon.selected:
-                func(fsicon.fsfile)
+        # The files are taken first, as the function may change the directory
+        for fsfile in self.model.selected():
+            func(fsfile)
 
     def GetSelectedFileIcons(self):
-        selection = [fsicon for fsicon in self.panel.icons.values() if fsicon.selected]
-        return selection
+        return [self.panel.icons[fsfile.leafname] for fsfile in self.model.selected()]
 
     def GetSelectedFiles(self):
-        selection = [fsicon.fsfile for fsicon in self.panel.icons.values() if fsicon.selected]
-        return selection
+        return self.model.selected()
 
     def on_file_menu(self, fsfile):
         if self.debug:
             print("Menu: %r" % (fsfile,))
 
-        # Prepare the menu to display files
-        selection = self.GetSelectedFileIcons()
-        if len(selection) == 0:
-            # No files selected, so we need to grey out the selection menu
-            self.menuitem_selection.Enable(False)
-            self.menuitem_selection.SetItemLabel("File ''")
-            self.menuitem_clearselection.Enable(False)
-        else:
-            self.menuitem_selection.Enable(True)
-            if len(selection) == 1:
-                label = 'File'
-                if selection[0].fsfile.isdir():
-                    label = 'Directory'
-                self.menuitem_selection.SetItemLabel("{} '{}'".format(label, selection[0].fsfile.leafname))
-            else:
-                self.menuitem_selection.SetItemLabel("Selection")
-            self.menuitem_clearselection.Enable(True)
+        # The model says what the menu offers, given the selection
+        caps = self.model.capabilities(fsfile)
+        self.menuitem_selection.Enable(caps.selection_enabled)
+        self.menuitem_selection.SetItemLabel(caps.selection_label)
+        self.menuitem_clearselection.Enable(caps.clear_enabled)
 
         # Display submenu ticking
         self.menuitem_display_large.Check(self.display_format == 'large')
@@ -965,43 +960,26 @@ class FSExplorerFrame(wx.Frame):
         self.menuitem_display_sortfiletype.Check(self.sort_order == 'filetype')
         self.menuitem_display_sorttimestamp.Check(self.sort_order == 'timestamp')
 
-        # New directory can only work if we can create a directory
         if self.menuitem_newdir:
-            self.menuitem_newdir.Enable(self.fsdir.can_mkdir())
-
-        # Can we delete ?
-        can_delete = False
-        if not self.support_delete or len(selection) == 0:
-            can_delete = False
-        else:
-            # Check the filesystem first - if it says no, there's no point in going further
-            if not self.fs.can_delete(None):
-                can_delete = False
-            else:
-                # We need to check all the files to see whether any are deletable.
-                for fsicon in selection:
-                    if fsicon.fsfile.can_delete():
-                        can_delete = True
-                        break
+            self.menuitem_newdir.Enable(caps.mkdir_enabled)
         if self.menuitem_file_delete:
-            self.menuitem_file_delete.Enable(can_delete)
-
-        # Can we rename?
-        can_rename = False
-        if not self.support_rename or len(selection) != 1:
-            can_rename = False
-        else:
-            selected_filename = selection[0].fsfile.filename
-            if self.fs.can_rename(selected_filename, None):
-                # This file is renameable so we can probably do this
-                can_rename = True
+            self.menuitem_file_delete.Enable(caps.delete_enabled)
         if self.menuitem_file_rename:
-            self.menuitem_file_rename.Enable(can_rename)
+            self.menuitem_file_rename.Enable(caps.rename_enabled)
 
         # Only show the parent if there is one
-        self.menuitem_openparent.Enable(bool(self.MenuHasOpenParent()))
+        self.menuitem_openparent.Enable(bool(caps.parent))
 
+        self.update_menu(caps)
         self.PopupMenu(self.menu)
+
+    def update_menu(self, caps):
+        """
+        Overloadable: Change the menu items that a subclass added, ready for the menu to be shown.
+
+        @param caps:    The `explorer.Capabilities` for the menu
+        """
+        pass
 
     def GetNextFramePos(self, counter=0):
         """
@@ -1009,23 +987,20 @@ class FSExplorerFrame(wx.Frame):
         """
         # We would like frames to appear in different positions when they're opened
         # as part of a sequence.
-        counterx = (counter % 8) + ((counter // 8) % 6)
-        countery = (counter % 8) + (((counter // 8) % 6) / 2.0)
-
+        (offset_x, offset_y) = explorer.cascade_offset(counter, self.open_offset_x, self.open_offset_y)
         pos = self.GetPosition()
-        pos = (pos.x + int(self.open_offset_x * (counterx + 1)),
-               pos.y + int(self.open_offset_y * (countery + 1)))
-        return pos
+        return (pos.x + offset_x, pos.y + offset_y)
 
     def OnFileActivate(self, fsfile, close=False, shift=None):
         if self.debug:
             print("Activate: %r" % (fsfile,))
         if shift is None:
             shift = self.shift_down
-        if fsfile.isdir():
-            self.OnFileOpenDir(fsfile, close=close)
+        activation = self.model.activate(fsfile, close=close, shift=shift)
+        if activation.action == explorer.OPEN_DIRECTORY:
+            self.OnFileOpenDir(fsfile, close=activation.close)
         else:
-            self.OnFileRun(fsfile, shift)
+            self.OnFileRun(fsfile, activation.shift)
 
     def OnFileRun(self, fsfile, shift):
         if self.debug:
@@ -1038,9 +1013,9 @@ class FSExplorerFrame(wx.Frame):
         if self.explorers:
             openwindow = self.explorers.find_window(target)
             if openwindow:
-                openwindow.Raise()
+                openwindow.raise_window()
                 if close:
-                    self.Close()
+                    self.close_window()
                 return
 
         if close:
@@ -1050,17 +1025,21 @@ class FSExplorerFrame(wx.Frame):
             self.OpenExplorer(target, pos=pos)
 
     def OpenExplorer(self, target, pos=None):
+        """
+        Open a window for a directory, or raise the one there is. A directory which cannot be read
+        is reported, and no window is opened.
+        """
         if not pos:
             pos = self.GetNextFramePos()
-        self.explorers.open_window(target, pos,
-                                   display_format=self.display_format,
-                                   sort_order=self.sort_order)
+        try:
+            self.explorers.open_window(target, pos,
+                                       display_format=self.display_format,
+                                       sort_order=self.sort_order)
+        except Exception as exc:
+            self.ReportError("Failed to open directory", str(exc))
 
     def MenuHasOpenParent(self):
-        target = self.fs.dirname(self.dirname)
-        if self.fs.normalise_name(target) == self.fs.normalise_name(self.dirname):
-            return None
-        return target
+        return self.model.parent_dirname()
 
     def OpenParentDirectory(self, pos=None):
         target = self.MenuHasOpenParent()
@@ -1077,40 +1056,32 @@ class FSExplorerFrame(wx.Frame):
 
     def OnSelectionDelete(self):
         # FIXME: This may open many windows, which is not ideal.
-        self.ApplySelectedFiles(self.OnFileDelete)
+        if self.model.delete():
+            self.redraw()
 
     def OnFileInfo(self, fsfile, counter=0):
         if self.debug:
             print("Info: %r" % (fsfile,))
         pos = self.GetNextFramePos(counter)
-        if self.explorers:
-            self.explorers.open_fileinfo(fsfile.filename, pos=pos)
-        else:
-            fsfileinfo = FSFileInfoFrame(self, fsfile, pos=pos)
-            fsfileinfo.Show()
+        try:
+            if self.explorers:
+                self.explorers.open_fileinfo(fsfile.filename, pos=pos)
+            else:
+                fsfileinfo = FSFileInfoFrame(self, fsfile, pos=pos)
+                fsfileinfo.Show()
+        except Exception as exc:
+            self.ReportError("Failed to show information", str(exc))
 
     def OnFileDelete(self, fsfile):
         if self.debug:
             print("Delete: %r" % (fsfile,))
 
         # FIXME: Configurable confirmation warning?
-        ok = self.Confirm("Confirm delete object",
-                          "Are you sure you want to delete '{}'?".format(fsfile.filename),
-                          cancel_default=True)
-
-        if not ok:
-            # Do not delete the file
-            return
-
-        try:
-            fsfile.delete()
-            self.RefreshDirectory()
-        except Exception as exc:
-            self.ReportError(title="Failed to delete",
-                             message=str(exc))
+        if self.model.delete([fsfile.leafname]):
+            self.redraw()
 
 
-class FSExplorers(object):
+class FSExplorers(FSExplorersBase):
     """
     An object that tracks the explorer frames.
     """
@@ -1122,77 +1093,18 @@ class FSExplorers(object):
     default_height = None
 
     def __init__(self, fs):
-        self.fs = fs
-        self.open_windows = {}
-        self.open_fileinfos = {}
+        super(FSExplorers, self).__init__(fs)
         self.default_width = self.default_width or self.explorer_frame_cls.default_width
         self.default_height = self.default_height or self.explorer_frame_cls.default_height
 
-    def fsfile_key(self, filename):
-        """
-        Return a key for the file that has been requested.
+    def create_explorer(self, dirname, pos=None, display_format=None, sort_order=None):
+        return self.explorer_frame_cls(self.fs, dirname, None, -1,
+                                       explorers=self,
+                                       pos=pos,
+                                       size=(self.default_width, self.default_height),
+                                       display_format=display_format,
+                                       sort_order=sort_order)
 
-        For systems like Windows or RISC OS, this will be a case insensitive name,
-        but for Linux might be an identity.
-        """
-        filenamekey = self.fs.normalise_name(filename)
-        return filenamekey
-
-    def window_has_closed(self, dirname):
-        filenamekey = self.fsfile_key(dirname)
-        if filenamekey in self.open_windows:
-            del self.open_windows[filenamekey]
-
-    def window_has_opened(self, dirname, window):
-        filenamekey = self.fsfile_key(dirname)
-        if filenamekey in self.open_windows:
-            # If there was a window already, force it to close so that we don't get multiple windows on the screen.
-            # Shouldn't happen if these functions are called consistently.
-            self.open_windows[filenamekey].Close()
-        self.open_windows[filenamekey] = window
-
-    def fileinfo_has_closed(self, filename):
-        filenamekey = self.fsfile_key(filename)
-        if filenamekey in self.open_fileinfos:
-            del self.open_fileinfos[filenamekey]
-
-    def fileinfo_has_opened(self, filename, window):
-        filenamekey = self.fsfile_key(filename)
-        if filenamekey in self.open_fileinfos:
-            # If there was a window already, force it to close so that we don't get multiple windows on the screen.
-            # Shouldn't happen if these functions are called consistently.
-            self.open_fileinfos[filenamekey].Close()
-
-        self.open_fileinfos[filenamekey] = window
-
-    def find_window(self, dirname):
-        filenamekey = self.fsfile_key(dirname)
-        return self.open_windows.get(filenamekey, None)
-
-    def open_window(self, dirname, pos=None, display_format=None, sort_order=None):
-        win = self.find_window(dirname)
-        if win:
-            win.Raise()
-        else:
-            win = self.explorer_frame_cls(self.fs, dirname, None, -1,
-                                          explorers=self,
-                                          pos=pos,
-                                          size=(self.default_width, self.default_height),
-                                          display_format=display_format,
-                                          sort_order=sort_order)
-            win.Show(True)
-
-        return win
-
-    def find_fileinfo(self, filename):
-        filenamekey = self.fsfile_key(filename)
-        return self.open_fileinfos.get(filenamekey, None)
-
-    def open_fileinfo(self, filename, pos=None):
-        win = self.find_fileinfo(filename)
-        if win:
-            win.Raise()
-        else:
-            fsfile = self.fs.fileinfo(filename)
-            fsfileinfo = self.fileinfo_frame_cls(self, fsfile, pos=pos, explorers=self)
-            fsfileinfo.Show()
+    def create_fileinfo(self, filename, pos=None):
+        fsfile = self.fs.fileinfo(filename)
+        return self.fileinfo_frame_cls(self, fsfile, pos=pos, explorers=self)
