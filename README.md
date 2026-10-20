@@ -44,6 +44,16 @@ An `FSExplorers` object may be passed to the `FSExplorerFrame` on creation, to
 track the existing explorer windows that have been opened. This allows them to be
 raised if they are re-opened whilst they are open.
 
+The `explorer` module contains `FSExplorerModel`, which is everything about an explorer
+window that does not depend on a toolkit: the directory and its files in the display order,
+the display format and sort order, the selection, what the menu offers, how clicks are taken
+as RISC OS buttons, and creating a directory, renaming and deleting. It does not import a
+toolkit. A window draws the model and passes clicks and menu choices to it, and the model
+returns whether the window needs to be drawn again. Failures (including a directory that
+has gone) are reported through a function that is passed in, and the model keeps what it
+had, so the window stays usable. The tests in `tests` run against a file system held in
+memory, and need no toolkit.
+
 The icons for the files are provided in the `icons` directory.
 
 
