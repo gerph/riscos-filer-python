@@ -58,6 +58,18 @@ memory, and need no toolkit.
 
 The icons for the files are provided in the `icons` directory.
 
+## GTK
+
+The `gtkexplorer` module provides the same explorer for GTK 3 (PyGObject): `GtkExplorerFrame`, with
+`GtkExplorers` to track the windows, and `gtkinfo` for the file information window. To look like the
+RISC OS filer, the icons are drawn by the window itself rather than by the standard GTK icon or list
+views (`iconlayout` works out where they go, with no toolkit). The SVG icons are loaded through GdkPixbuf
+if it can read SVG, and a plain shape is drawn if it cannot. The mouse models and the menu are those
+of the WxWidgets explorer.
+
+`gtkapp.py` is an example which browses a directory with no emulator; `--riscos-mouse` selects the RISC OS
+mouse model.
+
 
 ## Example
 
